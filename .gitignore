@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Env & secrets
+.env
+.env.local
+
+# Agent state
+*.sqlite
+checkpoints.sqlite
+checkpoints.sqlite-*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

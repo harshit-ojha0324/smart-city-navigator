@@ -1,0 +1,37 @@
+# The full system: 3 MCP tool servers + the Flask SSE gateway that reasons over
+# them. `docker compose up` then open http://localhost:8000
+services:
+  alerts:
+    build: .
+    command: python -m navigator.mcp_servers.alerts_server
+    environment:
+      NAVIGATOR_MCP_HOST: 0.0.0.0
+      NAVIGATOR_SIMULATE_FEED: ${NAVIGATOR_SIMULATE_FEED:-0}
+    expose: ["8071"]
+
+  routing:
+    build: .
+    command: python -m navigator.mcp_servers.routing_server
+    environment:
+      NAVIGATOR_MCP_HOST: 0.0.0.0
+    expose: ["8072"]
+
+  geocode:
+    build: .
+    command: python -m navigator.mcp_servers.geocode_server
+    environment:
+      NAVIGATOR_MCP_HOST: 0.0.0.0
+    expose: ["8073"]
+
+  gateway:
+    build: .
+    command: python -m navigator.gateway.app
+    depends_on: [alerts, routing, geocode]
+    ports: ["8000:8000"]
+    environment:
+      NAVIGATOR_TRANSPORT: mcp
+      NAVIGATOR_ALERTS_HOST: alerts
+      NAVIGATOR_ROUTING_HOST: routing
+      NAVIGATOR_GEOCODE_HOST: geocode
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
