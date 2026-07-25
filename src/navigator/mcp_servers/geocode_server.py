@@ -10,6 +10,7 @@ Run standalone:  python -m navigator.mcp_servers.geocode_server
 from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from navigator.core import geocode
 from navigator.mcp_servers import HOST, PORTS
@@ -17,7 +18,13 @@ from navigator.mcp_servers import HOST, PORTS
 mcp = FastMCP("navigator-geocode", host=HOST, port=PORTS["geocode"])
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Geocode a place/landmark",
+        readOnlyHint=True,
+        openWorldHint=False,  # deterministic offline landmark + station tables
+    )
+)
 def geocode_place(query: str) -> dict:
     """Resolve a free-text place or landmark to coordinates and the nearest station.
 
@@ -30,7 +37,13 @@ def geocode_place(query: str) -> dict:
         return {"error": str(exc)}
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Resolve text to a station",
+        readOnlyHint=True,
+        openWorldHint=False,
+    )
+)
 def resolve_station(query: str) -> dict:
     """Resolve free text to the best-matching subway station.
 
@@ -52,7 +65,13 @@ def resolve_station(query: str) -> dict:
         return {"error": str(exc)}
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Nearest station to coordinates",
+        readOnlyHint=True,
+        openWorldHint=False,
+    )
+)
 def nearest_station(lat: float, lng: float) -> dict:
     """Nearest modeled subway station to a latitude/longitude, with distance_km."""
     return geocode.nearest_station(lat, lng)

@@ -9,6 +9,7 @@ Run standalone:  python -m navigator.mcp_servers.alerts_server
 from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from navigator.core import mta_feed
 from navigator.mcp_servers import HOST, PORTS
@@ -16,7 +17,13 @@ from navigator.mcp_servers import HOST, PORTS
 mcp = FastMCP("navigator-alerts", host=HOST, port=PORTS["alerts"])
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Get subway service status",
+        readOnlyHint=True,
+        openWorldHint=True,  # reads the live MTA feed — data changes outside our control
+    )
+)
 def get_service_status() -> dict:
     """Current service status for every NYC subway line.
 
@@ -28,13 +35,25 @@ def get_service_status() -> dict:
     return {"summary": mta_feed.status_summary(alerts), "lines": alerts}
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Get single line status",
+        readOnlyHint=True,
+        openWorldHint=True,
+    )
+)
 def get_line_status(line: str) -> dict:
     """Service status for a single subway line (e.g. "A", "7", "Q")."""
     return mta_feed.get_line_status(line)
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="List elevator/escalator outages",
+        readOnlyHint=True,
+        openWorldHint=True,
+    )
+)
 def list_elevator_outages(station_contains: str = "") -> dict:
     """Current elevator/escalator outages, optionally filtered by station name substring."""
     outages = mta_feed.fetch_elevator_outages()

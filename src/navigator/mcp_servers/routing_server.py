@@ -10,6 +10,7 @@ Run standalone:  python -m navigator.mcp_servers.routing_server
 from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from navigator.core import geocode, routing
 from navigator.core.graph_data import STATIONS
@@ -32,7 +33,13 @@ def _resolve(text: str) -> dict:
     }
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Plan a subway trip (by place name)",
+        readOnlyHint=True,
+        openWorldHint=False,  # pure Dijkstra over the fixed in-repo station graph
+    )
+)
 def plan_trip(origin: str, destination: str) -> dict:
     """Plan the fastest subway trip between two places given as free text.
 
@@ -65,7 +72,13 @@ def plan_trip(origin: str, destination: str) -> dict:
     return route
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Plan a subway trip (by station id)",
+        readOnlyHint=True,
+        openWorldHint=False,
+    )
+)
 def plan_trip_by_id(origin_id: str, destination_id: str) -> dict:
     """Plan a trip between two known station ids (skips name resolution)."""
     try:
@@ -74,7 +87,13 @@ def plan_trip_by_id(origin_id: str, destination_id: str) -> dict:
         return {"error": str(exc), "found": False}
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="List modeled stations",
+        readOnlyHint=True,
+        openWorldHint=False,
+    )
+)
 def list_stations(on_line: str = "") -> dict:
     """List modeled stations, optionally only those served by a given line."""
     stations = STATIONS
