@@ -1,7 +1,7 @@
 """
 Evaluation prompts for the Smart City Navigator agent.
 
-Two sets, kept apart on purpose:
+Four sets, kept apart on purpose:
 
   * CORE (20) — the suite the agent was developed against. Three categories:
       happy_path   (10) routes / status / info questions that should succeed
@@ -9,15 +9,21 @@ Two sets, kept apart on purpose:
       tool_failure  (5) unknown places and lines, degenerate trips, a stubbed
                         feed, out-of-scope questions — degrade, never fabricate
 
-  * HELD-OUT (20) — written after the planner was finished and never used to
-    tune it: the same jobs asked the way people actually type, with typos,
-    missing punctuation, slang ("trains messed up on the 6?") and phrasings the
-    regex planner was never shown. Scoring both sets separately is the honest
-    way to report how well this works: a suite written alongside the thing it
-    grades will always flatter it.
+  * HELD-OUT (20), FRESH (15), WILD (15) — three generations of the same idea.
+    Each was written against the finished parser, in the words people actually
+    type (typos, no punctuation, slang: "trains messed up on the 6?"), scored
+    exactly once, and then *spent*: the gaps it found were fixed, so the parser
+    has now seen it and its score no longer measures generalization. The next
+    one gets written instead.
 
-Both run with the live GTFS-RT feed stubbed (NAVIGATOR_SIMULATE_FEED), so every
-status answer also exercises the fault-tolerant simulation fallback.
+    First scores, in order: 15/20 → 11/15 → 13/15. Each generation finds less,
+    and that trajectory — not the 100% they all show today — is the result.
+
+    If you change the planner, write a new set. Re-running a spent one tells
+    you only that you didn't regress.
+
+Every set runs with the live GTFS-RT feed stubbed (NAVIGATOR_SIMULATE_FEED), so
+status answers also exercise the fault-tolerant simulation fallback.
 
 Each case carries an `expect` spec consumed by eval/graders.py. Route cases name
 their endpoints rather than expected text: the grader resolves them and plans

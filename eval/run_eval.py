@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Run the 20-prompt eval suite against the agent and report pass rates.
+Run the eval sets against the agent and report pass rates.
 
     python eval/run_eval.py                     # the core 20, in-process
     python eval/run_eval.py --set heldout       # the 20 never used for tuning

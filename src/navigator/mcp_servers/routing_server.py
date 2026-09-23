@@ -1,5 +1,5 @@
 """
-Routing MCP server — Dijkstra trip planning over the 63-station subway graph.
+Routing MCP server — transfer-aware Dijkstra over the 475-station subway graph.
 
 Wraps navigator.core.routing (+ geocode for name resolution). When an endpoint
 is ambiguous it returns needs_disambiguation with candidates instead of guessing,

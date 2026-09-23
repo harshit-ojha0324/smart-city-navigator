@@ -345,8 +345,8 @@ tests/           109 unit + integration tests (incl. live MCP-over-HTTP and the 
   The same rule covers data provenance: planned work that hasn't started yet is not
   reported as current (GTFS-RT `active_period`), simulated status is labelled as
   simulated, a landmark snapped to a station says so (and one too far from any
-  station, like JFK, is refused), and "no elevator outages" is never claimed when the
-  outage feed couldn't be read.
+  station — LaGuardia, 3 km from the nearest stop — is refused rather than routed),
+  and "no elevator outages" is never claimed when the outage feed couldn't be read.
 - **Scores say what produced them.** Every eval report names its reasoner, the four
   sets are scored apart, and each says whether it has been tuned on. A number without
   that context is worth nothing — and a set scored twice is worth less than the first
@@ -355,3 +355,23 @@ tests/           109 unit + integration tests (incl. live MCP-over-HTTP and the 
   checkpointed `thread_id` keeps its message history but can't replay the previous
   question's answer; the gateway gives every request its own thread unless the caller
   passes one.
+
+## Known limits
+
+Stated plainly, because a reviewer will find them anyway:
+
+- **Not cloud-deployed.** It runs locally (`make run`) or under `docker compose`.
+- **LangSmith is wired but unrun.** `--langsmith` works and degrades cleanly without
+  a key, but there is no trace screenshot and no token-cost number behind it.
+- **No hosted-model numbers.** The model column is a local `qwen3:8b`; Gemini is
+  supported and untested.
+- **No departure-time model.** Segment weights are median run times, so the planner
+  has no timetable, no waiting model, and no Pareto front over (time, transfers) — a
+  single cost with a fixed 4-minute transfer penalty approximates it. Time-dependent
+  edges or RAPTOR is the honest next step.
+- **Delays are scoped, not fused.** On a compound question the Service Advisor checks
+  exactly the lines the route rides, but a delay never causes a re-plan around it.
+- **Alerts are the MTA's JSON feed**, not a GTFS-RT protobuf stream, and there are no
+  live arrival countdowns.
+- **Landmarks are a small hand-written table.** Stations come from GTFS; "Williamsburg"
+  and "Central Park" do not.

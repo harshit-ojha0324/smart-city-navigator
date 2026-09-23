@@ -3,7 +3,7 @@ Three MCP tool servers, each wrapping one slice of the transit core and speaking
 the Model Context Protocol over streamable HTTP (FastMCP).
 
     alerts   — live GTFS-RT service status + elevator outages
-    routing  — Dijkstra trip planning over the 63-station graph
+    routing  — transfer-aware Dijkstra over the 475-station graph
     geocode  — free-text place / station resolution
 
 The agent connects to all three through langchain-mcp-adapters, so the LLM acts
