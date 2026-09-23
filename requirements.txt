@@ -1,20 +1,26 @@
+# Every dependency carries an upper bound on its next major. CI installs fresh
+# on every run, so an unbounded dependency means any upstream major release
+# breaks the build on a commit that didn't touch it — which is exactly how the
+# mcp 2.0 rename below took this repo down.
+
 # ── Agent orchestration ────────────────────────────────────────────────
 langgraph>=0.2.60,<0.4
-langgraph-checkpoint-sqlite>=2.0.0
+langgraph-checkpoint-sqlite>=2.0.0,<3
 langchain-core>=0.3.0,<0.4
 aiosqlite==0.20.0            # 0.21+ dropped Connection.is_alive() the sqlite saver needs
 
 # ── Model Context Protocol (servers + client adapters) ─────────────────
-mcp>=1.9.0
+mcp>=1.9.0,<2                # 2.x renamed FastMCP to MCPServer and changed the
+                             # decorator API; the servers here are v1 code
 langchain-mcp-adapters>=0.1.7,<0.2   # 0.2 requires langchain-core 1.x
 
 # ── LLM + tracing (all optional at runtime; the agent falls back to the
 #    deterministic planner when no provider is configured) ───────────────
-langchain-google-genai>=2.0.0
+langchain-google-genai>=2.0.0,<3
 langchain-ollama>=0.2,<0.3       # local models (0.3+ requires langchain-core 1.x)
-langsmith>=0.1.100
+langsmith>=0.1.100,<1
 
 # ── Gateway + data ─────────────────────────────────────────────────────
-flask>=3.0
-flask-cors>=4.0
-requests>=2.31
+flask>=3.0,<4
+flask-cors>=4.0,<7
+requests>=2.31,<3
