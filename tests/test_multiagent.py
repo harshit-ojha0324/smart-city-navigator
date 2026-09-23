@@ -43,10 +43,10 @@ def test_supervisor_routes_to_station_info():
 
 
 def test_compound_query_invokes_two_agents():
-    agents, answer = _agents("How do I get from Penn Station to Fulton St and are there delays?")
+    agents, answer = _agents("How do I get from Penn Station to Union Square and are there delays?")
     assert agents == ["route_planner", "service_advisor"]
     assert "Take the" in answer            # route planner contributed
-    assert "everity" in answer or "Delays" in answer or "normally" in answer  # service advisor contributed
+    assert "Service on your route" in answer  # service advisor contributed
 
 
 def test_out_of_scope_delegates_to_no_agent():

@@ -45,7 +45,7 @@ def test_routing_list_stations_on_line():
 
 def test_geocode_place():
     out = call(geocode_server, "geocode_place", {"query": "Empire State Building"})
-    assert out["nearest_station"]["id"] == "hz"
+    assert out["nearest_station"]["name"] == "34 St-Herald Sq"
 
 
 def test_geocode_resolve_ambiguous():
@@ -55,7 +55,7 @@ def test_geocode_resolve_ambiguous():
 
 def test_geocode_nearest_station():
     out = call(geocode_server, "nearest_station", {"lat": 40.7580, "lng": -73.9855})
-    assert out["id"] == "ts"
+    assert out["name"] == "Times Sq-42 St"
 
 
 def test_all_servers_expose_expected_tools():

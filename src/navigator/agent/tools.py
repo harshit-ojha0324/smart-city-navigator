@@ -3,149 +3,68 @@ Tool loading for the agent, in two interchangeable transports:
 
   * "mcp"       — connect to the 3 FastMCP servers over streamable HTTP via
                   langchain-mcp-adapters (the production path the gateway uses).
-  * "inprocess" — LangChain tools with identical names that call the same core,
+  * "inprocess" — the *same* server tool functions wrapped as LangChain tools,
                   skipping the network hop (fast, hermetic path for tests/CI).
 
-Both expose the same nine tool names, so the graph and the deterministic planner
-are transport-agnostic.
+The in-process tools are generated from the MCP servers' own functions, so both
+transports share one implementation, one set of names/args, and one docstring
+per tool — they cannot drift apart. The graph and planner are transport-agnostic.
 """
 from __future__ import annotations
 
+import functools
 import json
 
-from langchain_core.tools import tool
+from langchain_core.tools import BaseTool, tool
 
-from navigator.core import geocode, mta_feed, routing
-from navigator.core.graph_data import STATIONS
-from navigator.mcp_servers import all_server_urls
+from navigator.mcp_servers import alerts_server, all_server_urls, geocode_server, routing_server
 
-
-def _json(obj) -> str:
-    return json.dumps(obj, ensure_ascii=False)
-
-
-# ── In-process tools (same names/args as the MCP servers) ──────────────
-@tool
-def get_service_status() -> str:
-    """Current service status for every NYC subway line (severity 0-3 per line)."""
-    alerts = mta_feed.fetch_alerts()
-    return _json({"summary": mta_feed.status_summary(alerts), "lines": alerts})
-
-
-@tool
-def get_line_status(line: str) -> str:
-    """Service status for a single subway line (e.g. "A", "7", "Q")."""
-    return _json(mta_feed.get_line_status(line))
-
-
-@tool
-def list_elevator_outages(station_contains: str = "") -> str:
-    """Current elevator/escalator outages, optionally filtered by station substring."""
-    outages = mta_feed.fetch_elevator_outages()
-    if station_contains:
-        needle = station_contains.lower()
-        outages = [o for o in outages if needle in o.get("station", "").lower()]
-    return _json({"count": len(outages), "outages": outages})
-
-
-@tool
-def plan_trip(origin: str, destination: str) -> str:
-    """Plan the fastest subway trip between two free-text places.
-
-    Returns numbered legs, total minutes, stops and transfers — or
-    needs_disambiguation with candidates when an endpoint is ambiguous.
-    """
-    try:
-        o = geocode.resolve_station(origin)
-        d = geocode.resolve_station(destination)
-    except geocode.GeocodeError as exc:
-        return _json({"error": str(exc), "found": False})
-
-    def pack(res):
-        return {"id": res["station"]["id"], "name": res["station"]["name"],
-                "ambiguous": res["ambiguous"],
-                "candidates": [{"id": s, "name": geocode.STATION_BY_ID[s]["name"]}
-                               for s in res["candidates"]]}
-
-    op, dp = pack(o), pack(d)
-    if op["ambiguous"] or dp["ambiguous"]:
-        return _json({"needs_disambiguation": True, "origin": op, "destination": dp,
-                      "message": "One or both endpoints matched multiple stations."})
-    try:
-        route = routing.plan_route(op["id"], dp["id"])
-    except routing.RouteError as exc:
-        return _json({"error": str(exc), "found": False})
-    route["origin_station"] = op["name"]
-    route["destination_station"] = dp["name"]
-    return _json(route)
-
-
-@tool
-def plan_trip_by_id(origin_id: str, destination_id: str) -> str:
-    """Plan a trip between two known station ids (skips name resolution)."""
-    try:
-        return _json(routing.plan_route(origin_id, destination_id))
-    except routing.RouteError as exc:
-        return _json({"error": str(exc), "found": False})
-
-
-@tool
-def list_stations(on_line: str = "") -> str:
-    """List modeled stations, optionally only those served by a given line."""
-    stations = STATIONS
-    if on_line:
-        line = on_line.strip().upper()
-        stations = [s for s in stations if line in s["lines"]]
-    return _json({"count": len(stations),
-                  "stations": [{"id": s["id"], "name": s["name"], "lines": s["lines"]}
-                               for s in stations]})
-
-
-@tool
-def geocode_place(query: str) -> str:
-    """Resolve a free-text place/landmark to coordinates and the nearest station."""
-    try:
-        return _json(geocode.geocode_place(query))
-    except geocode.GeocodeError as exc:
-        return _json({"error": str(exc)})
-
-
-@tool
-def resolve_station(query: str) -> str:
-    """Resolve free text to the best-matching station (+ ambiguity candidates)."""
-    try:
-        res = geocode.resolve_station(query)
-        return _json({"station": res["station"], "ambiguous": res["ambiguous"],
-                      "score": res["score"],
-                      "candidates": [{"id": s, "name": geocode.STATION_BY_ID[s]["name"]}
-                                     for s in res["candidates"]]})
-    except geocode.GeocodeError as exc:
-        return _json({"error": str(exc)})
-
-
-@tool
-def nearest_station(lat: float, lng: float) -> str:
-    """Nearest modeled subway station to a latitude/longitude."""
-    return _json(geocode.nearest_station(lat, lng))
-
-
-INPROCESS_TOOLS = [
-    get_service_status, get_line_status, list_elevator_outages,
-    plan_trip, plan_trip_by_id, list_stations,
-    geocode_place, resolve_station, nearest_station,
+# Every tool the three servers expose, in a stable order.
+_SERVER_FUNCTIONS = [
+    alerts_server.get_service_status,
+    alerts_server.get_line_status,
+    alerts_server.list_elevator_outages,
+    routing_server.plan_trip,
+    routing_server.plan_trip_by_id,
+    routing_server.list_stations,
+    geocode_server.geocode_place,
+    geocode_server.resolve_station,
+    geocode_server.nearest_station,
 ]
+
+
+def _as_langchain_tool(fn) -> BaseTool:
+    """Wrap a server tool function; its dict result is JSON-encoded exactly as
+    the MCP transport would deliver it as text content."""
+    @functools.wraps(fn)
+    def run(*args, **kwargs) -> str:
+        return json.dumps(fn(*args, **kwargs), ensure_ascii=False)
+
+    run.__annotations__ = {**fn.__annotations__, "return": str}
+    return tool(run)
+
+
+INPROCESS_TOOLS: list[BaseTool] = [_as_langchain_tool(fn) for fn in _SERVER_FUNCTIONS]
 
 
 def inprocess_tools() -> list:
     return list(INPROCESS_TOOLS)
 
 
+# Tool *definitions* are stable for a server's lifetime, and each MCP tool call
+# opens its own session, so the listing can be reused across requests instead of
+# re-running the 3-server handshake + list_tools on every question.
+_MCP_TOOL_CACHE: dict[str | None, list] = {}
+
+
 async def load_mcp_tools(host: str | None = None) -> list:
     """Load tools from the 3 live FastMCP servers over streamable HTTP."""
-    from langchain_mcp_adapters.client import MultiServerMCPClient
+    if host not in _MCP_TOOL_CACHE:
+        from langchain_mcp_adapters.client import MultiServerMCPClient
 
-    client = MultiServerMCPClient(all_server_urls(host))
-    return await client.get_tools()
+        client = MultiServerMCPClient(all_server_urls(host))
+        _MCP_TOOL_CACHE[host] = await client.get_tools()
+    return list(_MCP_TOOL_CACHE[host])
 
 
 async def build_tools(transport: str = "inprocess", host: str | None = None) -> list:

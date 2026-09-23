@@ -52,12 +52,11 @@ def resolve_station(query: str) -> dict:
     """
     try:
         res = geocode.resolve_station(query)
+        station = {**res["station"],
+                   "complex_lines": geocode.rider_lines(geocode.complex_lines(res["station"]["id"]))}
         return {
-            "station": res["station"],
-            "candidates": [
-                {"id": sid, "name": geocode.STATION_BY_ID[sid]["name"]}
-                for sid in res["candidates"]
-            ],
+            "station": station,
+            "candidates": [geocode._candidate(sid) for sid in res["candidates"]],
             "ambiguous": res["ambiguous"],
             "score": res["score"],
         }
@@ -72,9 +71,15 @@ def resolve_station(query: str) -> dict:
         openWorldHint=False,
     )
 )
-def nearest_station(lat: float, lng: float) -> dict:
-    """Nearest modeled subway station to a latitude/longitude, with distance_km."""
-    return geocode.nearest_station(lat, lng)
+def nearest_station(lat: float | str, lng: float | str) -> dict:
+    """Nearest modeled subway station to a latitude/longitude, with distance_km.
+
+    Coordinates arriving as strings are coerced — same reason as `line`.
+    """
+    try:
+        return geocode.nearest_station(float(lat), float(lng))
+    except (TypeError, ValueError):
+        return {"error": f"lat/lng must be numbers, got {lat!r} and {lng!r}"}
 
 
 if __name__ == "__main__":

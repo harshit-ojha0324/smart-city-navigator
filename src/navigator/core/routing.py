@@ -1,121 +1,165 @@
 """
-Dijkstra route planning over the static NYC subway graph.
+Transfer-aware route planning over the GTFS subway network.
 
-Ported from the NYC Transit Hub client-side planner (src/lib/dijkstra.js) and
-extended with server-side leg/transfer assignment so the agent can describe a
-trip in words ("take the 1, transfer to the A at ...").
+Dijkstra runs over (station, line-you-are-riding) states rather than plain
+stations, which buys three things a station-only search can't express:
 
-The graph is treated as undirected — exactly as the original JS relaxed both
-endpoints of every edge — with the minimum weight kept when an edge is listed
-in both directions.
+  * a change of train costs TRANSFER_MINUTES, so the planner never trades a
+    one-seat ride for two changes to save a minute;
+  * each segment is priced on the line actually ridden, so an express hop beats
+    the local one over the same pair of stations;
+  * in-system walking transfers (Times Sq ↔ Port Authority) are first-class
+    moves, and come back as explicit walking legs.
+
+Legs fall straight out of the optimal path, so the agent can describe the trip
+in words ("take the L, transfer to the N at Union Sq").
 """
 from __future__ import annotations
 
 import heapq
 from functools import lru_cache
 
-from .graph_data import EDGES, STATION_BY_ID, STATION_IDS
+from .graph_data import (
+    RIDE_EDGES,
+    STATION_BY_ID,
+    STATION_IDS,
+    WALK_EDGES,
+    line_label,
+    same_complex,
+)
+
+# Minutes charged for changing trains: the platform change plus the average
+# wait for the next one.
+TRANSFER_MINUTES = 4.0
+
+# Pseudo-line for a walking connection inside a station complex.
+WALK = "walk"
 
 
 # ── Adjacency, built once ──────────────────────────────────────────────
-def _build_adjacency() -> dict[str, dict[str, tuple[float, int]]]:
-    adj: dict[str, dict[str, tuple[float, int]]] = {sid: {} for sid in STATION_IDS}
-    for a, b, minutes, stops in EDGES:
-        if a not in adj or b not in adj:
-            continue  # skip edges referencing unknown stations
-        for u, v in ((a, b), (b, a)):
-            existing = adj[u].get(v)
-            if existing is None or minutes < existing[0]:
-                adj[u][v] = (float(minutes), int(stops))
-    return adj
+def _build_adjacency() -> tuple[dict[str, dict[str, dict[str, float]]], dict[str, dict[str, float]]]:
+    rides: dict[str, dict[str, dict[str, float]]] = {sid: {} for sid in STATION_IDS}
+    walks: dict[str, dict[str, float]] = {sid: {} for sid in STATION_IDS}
+    for edge in RIDE_EDGES:
+        a, b = edge["from"], edge["to"]
+        if a in rides and b in rides:
+            rides[a][b] = {line: float(m) for line, m in edge["lines"].items()}
+    for edge in WALK_EDGES:
+        a, b, minutes = edge["from"], edge["to"], float(edge["minutes"])
+        if a in walks and b in walks:
+            walks[a][b] = min(minutes, walks[a].get(b, minutes))
+            walks[b][a] = min(minutes, walks[b].get(a, minutes))
+    return rides, walks
 
 
-_ADJ = _build_adjacency()
+_RIDES, _WALKS = _build_adjacency()
 
 
 class RouteError(ValueError):
     """Raised when a route cannot be planned (unknown or unreachable station)."""
 
 
-def _edge_lines(a: str, b: str) -> set[str]:
-    """Subway lines that serve both endpoints of a hop (the ride options)."""
-    return set(STATION_BY_ID[a]["lines"]) & set(STATION_BY_ID[b]["lines"])
+def _dijkstra(start_id: str, end_id: str) -> tuple[list[tuple[str, str, str]], float]:
+    """
+    Shortest path over (station, line) states.
 
-
-def _dijkstra(start_id: str, end_id: str) -> tuple[list[str], float]:
-    """Return (path_of_station_ids, total_minutes). Empty path if unreachable."""
-    dist: dict[str, float] = {sid: float("inf") for sid in STATION_IDS}
-    prev: dict[str, str | None] = {sid: None for sid in STATION_IDS}
-    dist[start_id] = 0.0
-    pq: list[tuple[float, str]] = [(0.0, start_id)]
-    visited: set[str] = set()
+    Returns ([(station_id, how_you_arrived, line), ...], total_minutes) where
+    `how_you_arrived` is "ride", "walk", or "start"; empty path if unreachable.
+    Ties break toward fewer transfers.
+    """
+    start = (start_id, None)
+    best: dict[tuple, tuple[float, int]] = {start: (0.0, 0)}
+    prev: dict[tuple, tuple[tuple, str, str]] = {}
+    seq = 0  # heap tie-breaker so states are never compared
+    pq: list = [(0.0, 0, seq, start)]
+    done: set[tuple] = set()
 
     while pq:
-        d, u = heapq.heappop(pq)
-        if u in visited:
+        cost, transfers, _, state = heapq.heappop(pq)
+        if state in done:
             continue
-        visited.add(u)
-        if u == end_id:
-            break
-        for v, (w, _stops) in _ADJ[u].items():
-            if v in visited:
-                continue
-            alt = d + w
-            if alt < dist[v]:
-                dist[v] = alt
-                prev[v] = u
-                heapq.heappush(pq, (alt, v))
+        done.add(state)
+        station, riding = state
 
-    if dist[end_id] == float("inf"):
-        return [], float("inf")
+        if station == end_id:
+            # Each entry carries the move that *arrived* at it, so consecutive
+            # pairs read as (where you were, how you got to the next station).
+            path: list[tuple[str, str, str]] = []
+            cur = state
+            while cur in prev:
+                pred, how, line = prev[cur]
+                path.append((cur[0], how, line))
+                cur = pred
+            path.append((cur[0], "start", None))
+            path.reverse()
+            return path, cost
 
-    path: list[str] = []
-    cur: str | None = end_id
-    while cur is not None:
-        path.insert(0, cur)
-        cur = prev[cur]
-    return path, dist[end_id]
+        for nxt, lines in _RIDES[station].items():
+            for line, minutes in lines.items():
+                change = riding is not None and line != riding
+                cand = (cost + minutes + (TRANSFER_MINUTES if change else 0.0),
+                        transfers + int(change))
+                ns = (nxt, line)
+                if ns not in done and cand < best.get(ns, (float("inf"), 0)):
+                    best[ns] = cand
+                    prev[ns] = (state, "ride", line)
+                    seq += 1
+                    heapq.heappush(pq, (cand[0], cand[1], seq, ns))
+
+        # Walking keeps whatever line you were riding: stepping across a complex
+        # and re-boarding the same line is not a transfer.
+        for nxt, minutes in _WALKS[station].items():
+            cand = (cost + minutes, transfers)
+            ns = (nxt, riding)
+            if ns not in done and cand < best.get(ns, (float("inf"), 0)):
+                best[ns] = cand
+                prev[ns] = (state, "walk", WALK)
+                seq += 1
+                heapq.heappush(pq, (cand[0], cand[1], seq, ns))
+
+    return [], float("inf")
 
 
-def _assign_legs(path: list[str]) -> list[dict]:
-    """
-    Split a station path into ride legs, minimizing line changes.
-
-    Greedy interval-intersection: extend a leg while a single line can serve
-    every hop so far; when the feasible set empties, that boundary is a transfer.
-    """
+def _legs_from_path(path: list[tuple[str, str, str]]) -> list[dict]:
+    """Group the path's moves into ride legs (consecutive hops on one line)
+    and walking legs."""
     legs: list[dict] = []
-    n = len(path)
-    idx = 0
-    while idx < n - 1:
-        feasible = _edge_lines(path[idx], path[idx + 1])
-        j = idx + 1
-        cur = set(feasible)
-        while j < n - 1:
-            nxt = _edge_lines(path[j], path[j + 1])
-            inter = cur & nxt
-            if not inter:
-                break
-            cur = inter
-            j += 1
-
-        minutes, stops = 0.0, 0
-        for k in range(idx, j):
-            w, s = _ADJ[path[k]][path[k + 1]]
-            minutes += w
-            stops += s
-
-        legs.append({
-            "line": sorted(cur)[0] if cur else "?",
-            "line_options": sorted(cur),
-            "from_id": path[idx],
-            "from": STATION_BY_ID[path[idx]]["name"],
-            "to_id": path[j],
-            "to": STATION_BY_ID[path[j]]["name"],
-            "num_stops": stops,
-            "minutes": round(minutes, 1),
-        })
-        idx = j
+    carried = 0.0     # in-station transfer time, folded into the leg it serves
+    boarding = None   # platform you walked to inside the complex
+    for (a, _, _), (b, how, line) in zip(path, path[1:], strict=False):  # pairwise
+        walk = how == "walk"
+        minutes = (_WALKS[a][b] if walk else _RIDES[a][b][line])
+        if walk and same_complex(a, b):
+            # Crossing platforms inside one station is the transfer itself, not
+            # a walking leg ("walk from Times Sq-42 St to Times Sq-42 St").
+            carried += minutes
+            boarding = b
+            continue
+        if boarding is not None:
+            # Both sides of an in-station change name the same platform, so the
+            # trip reads "...to 14 St; transfer to the F from 14 St".
+            if legs:
+                legs[-1]["to_id"] = boarding
+                legs[-1]["to"] = STATION_BY_ID[boarding]["name"]
+            a = boarding
+            boarding = None
+        if legs and legs[-1]["line"] == line and not (walk and legs[-1]["walk"]):
+            leg = legs[-1]
+        else:
+            leg = {"line": line, "label": "walk" if walk else line_label(line),
+                   "walk": walk, "from_id": a, "from": STATION_BY_ID[a]["name"],
+                   "num_stops": 0, "minutes": 0.0}
+            legs.append(leg)
+        leg["to_id"], leg["to"] = b, STATION_BY_ID[b]["name"]
+        leg["minutes"] = round(leg["minutes"] + minutes + carried, 1)
+        carried = 0.0
+        if not walk:
+            leg["num_stops"] += 1
+    if carried and legs:  # trailing platform change at the destination
+        legs[-1]["minutes"] = round(legs[-1]["minutes"] + carried, 1)
+        if boarding is not None:
+            legs[-1]["to_id"] = boarding
+            legs[-1]["to"] = STATION_BY_ID[boarding]["name"]
     return legs
 
 
@@ -124,16 +168,20 @@ def _summary(legs: list[dict], minutes: float, stops: int) -> str:
         return "No route found."
     parts = []
     for i, leg in enumerate(legs):
-        verb = "Take" if i == 0 else f"transfer to"
+        if leg["walk"]:
+            parts.append(f"walk from {leg['from']} to {leg['to']} (~{int(round(leg['minutes']))} min)")
+            continue
+        verb = "Take" if i == 0 else ("take" if legs[i - 1]["walk"] else "transfer to")
         parts.append(
-            f"{verb} the {leg['line']} from {leg['from']} to {leg['to']} "
+            f"{verb} the {leg['label']} from {leg['from']} to {leg['to']} "
             f"({leg['num_stops']} stop{'s' if leg['num_stops'] != 1 else ''})"
         )
-    transfers = len(legs) - 1
+    transfers = sum(1 for leg in legs[1:] if not leg["walk"])
     tx = "no transfers" if transfers == 0 else f"{transfers} transfer{'s' if transfers != 1 else ''}"
+    text = "; ".join(parts)
     return (
-        "; ".join(parts)
-        + f". About {int(round(minutes))} min, {stops} stops, {tx}."
+        text[0].upper() + text[1:]
+        + f". About {int(round(minutes))} min, {stops} stop{'s' if stops != 1 else ''}, {tx}."
     )
 
 
@@ -142,8 +190,9 @@ def plan_route(start_id: str, end_id: str) -> dict:
     """
     Plan the fastest subway route between two station ids.
 
-    Returns a dict with the path, per-leg directions, total time, stop count,
-    and transfer count. Raises RouteError for unknown/unreachable stations.
+    Returns a dict with the path, per-leg directions, total time (ride time plus
+    TRANSFER_MINUTES per change), stop count, and transfer count. Raises
+    RouteError for unknown/unreachable stations.
     """
     if start_id not in STATION_BY_ID:
         raise RouteError(f"unknown start station id: {start_id!r}")
@@ -157,18 +206,20 @@ def plan_route(start_id: str, end_id: str) -> dict:
             "total_minutes": 0,
             "total_stops": 0,
             "num_transfers": 0,
+            "transfer_minutes": TRANSFER_MINUTES,
             "legs": [],
             "summary": "You are already there.",
         }
 
-    path, minutes = _dijkstra(start_id, end_id)
-    if not path:
+    states, minutes = _dijkstra(start_id, end_id)
+    if not states:
         raise RouteError(
             f"no route between {STATION_BY_ID[start_id]['name']} and "
             f"{STATION_BY_ID[end_id]['name']} in the modeled network"
         )
 
-    legs = _assign_legs(path)
+    path = [sid for sid, _how, _line in states]
+    legs = _legs_from_path(states)
     total_stops = sum(leg["num_stops"] for leg in legs)
     return {
         "found": True,
@@ -176,7 +227,8 @@ def plan_route(start_id: str, end_id: str) -> dict:
         "stations": [STATION_BY_ID[sid]["name"] for sid in path],
         "total_minutes": int(round(minutes)),
         "total_stops": total_stops,
-        "num_transfers": max(0, len(legs) - 1),
+        "num_transfers": sum(1 for leg in legs[1:] if not leg["walk"]),
+        "transfer_minutes": TRANSFER_MINUTES,
         "legs": legs,
         "summary": _summary(legs, minutes, total_stops),
     }

@@ -11,7 +11,7 @@ from __future__ import annotations
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-from navigator.core import mta_feed
+from navigator.core import geocode, mta_feed
 from navigator.mcp_servers import HOST, PORTS
 
 mcp = FastMCP("navigator-alerts", host=HOST, port=PORTS["alerts"])
@@ -42,9 +42,13 @@ def get_service_status() -> dict:
         openWorldHint=True,
     )
 )
-def get_line_status(line: str) -> dict:
-    """Service status for a single subway line (e.g. "A", "7", "Q")."""
-    return mta_feed.get_line_status(line)
+def get_line_status(line: str | int) -> dict:
+    """Service status for a single subway line (e.g. "A", "7", "Q").
+
+    Accepts a number as well as a string: models routinely send the 7 train as
+    the integer 7, and a schema that rejects it just burns retries.
+    """
+    return mta_feed.get_line_status(str(line))
 
 
 @mcp.tool(
@@ -54,13 +58,23 @@ def get_line_status(line: str) -> dict:
         openWorldHint=True,
     )
 )
-def list_elevator_outages(station_contains: str = "") -> dict:
-    """Current elevator/escalator outages, optionally filtered by station name substring."""
+def list_elevator_outages(station_contains: str | int = "") -> dict:
+    """Current elevator/escalator outages, optionally filtered by station name.
+
+    Matching is normalized ("Times Square" finds "Times Sq-42 St"). Returns
+    {"available": False} when the live outage feed can't be reached, so the
+    caller never reports "no outages" it didn't actually observe.
+    """
+    station_contains = str(station_contains or "")
     outages = mta_feed.fetch_elevator_outages()
+    if outages is None:
+        return {"available": False, "count": 0, "outages": [], "station": station_contains,
+                "message": "The live elevator/escalator outage feed is unavailable right now."}
     if station_contains:
-        needle = station_contains.lower()
-        outages = [o for o in outages if needle in o.get("station", "").lower()]
-    return {"count": len(outages), "outages": outages}
+        needle = geocode.normalize(station_contains)
+        outages = [o for o in outages if needle and needle in geocode.normalize(o.get("station", ""))]
+    return {"available": True, "count": len(outages), "outages": outages,
+            "station": station_contains}
 
 
 if __name__ == "__main__":

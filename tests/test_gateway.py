@@ -26,7 +26,7 @@ def test_ask_requires_question():
 
 
 def test_stream_emits_reasoning_and_done():
-    r = _client().get("/api/stream?q=from Penn Station to Fulton St")
+    r = _client().get("/api/stream?q=from Penn Station to Union Square")
     assert r.status_code == 200
     assert "text/event-stream" in r.headers["Content-Type"]
     text = r.get_data(as_text=True)

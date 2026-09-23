@@ -61,13 +61,24 @@ _cache = TTLCache(os.environ.get("REDIS_URL"))
 ALERTS_TTL = int(os.environ.get("ALERTS_TTL", "30"))
 
 
+try:
+    from zoneinfo import ZoneInfo
+
+    _NYC = ZoneInfo("America/New_York")
+except Exception:  # pragma: no cover - no tz database (e.g. minimal containers)
+    _NYC = None
+
+
 def _now_str() -> str:
-    return datetime.now(timezone.utc).strftime("%I:%M:%S %p")
+    """Wall-clock time riders expect: NYC local, labelled (UTC if no tz data)."""
+    if _NYC is not None:
+        return datetime.now(_NYC).strftime("%I:%M:%S %p ET")
+    return datetime.now(timezone.utc).strftime("%I:%M:%S %p UTC")
 
 
 def _good_status() -> dict:
     return {"severity": 0, "status": "Good Service",
-            "message": STATUS_MESSAGES[0], "updatedAt": _now_str()}
+            "message": STATUS_MESSAGES[0], "updatedAt": _now_str(), "source": "live"}
 
 
 def _mta_get(url: str, timeout: int = 10):
@@ -120,35 +131,59 @@ def get_line_status(line_id: str) -> dict:
     return {"line": line_id, **alerts[line_id]}
 
 
-def _parse_alerts_json(data: dict) -> dict:
+def _is_active(alert: dict, now_ts: float) -> bool:
+    """True if any active_period covers now. The feed also publishes *upcoming*
+    planned work (e.g. weekend suspensions), which must not read as current.
+    No active_period at all means the alert is in effect until removed."""
+    periods = alert.get("active_period") or []
+    if not periods:
+        return True
+    for p in periods:
+        start = int(p.get("start") or 0)
+        end = int(p.get("end") or 0)
+        if start <= now_ts and (not end or now_ts <= end):
+            return True
+    return False
+
+
+def _parse_alerts_json(data: dict, now_ts: float | None = None) -> dict:
     now = _now_str()
+    now_ts = datetime.now(timezone.utc).timestamp() if now_ts is None else now_ts
     result = {line: _good_status() for line in SUBWAY_LINE_IDS}
     for entity in data.get("entity", []):
         alert = entity.get("alert", {})
+        if not _is_active(alert, now_ts):
+            continue
         mercury = alert.get("transit_realtime.mercury_alert", {})
         severity, label = ALERT_TYPE_MAP.get(mercury.get("alert_type", ""), (0, "Good Service"))
         header = _get_translation(alert.get("header_text", {}))
         description = _get_translation(alert.get("description_text", {}))
-        message = header or description or STATUS_MESSAGES[severity]
+        # Feed headers are multi-line ("No [A] between ...\n[A] will be rerouted...").
+        message = " ".join((header or description or STATUS_MESSAGES[severity]).split())
         for informed in alert.get("informed_entity", []):
             route_id = informed.get("route_id", "")
             if route_id not in result:
                 continue
             if severity > result[route_id]["severity"]:  # only upgrade severity
                 result[route_id] = {"severity": severity, "status": label,
-                                    "message": message, "updatedAt": now}
+                                    "message": message, "updatedAt": now, "source": "live"}
     return result
 
 
 # ── Elevator / escalator outages ───────────────────────────────────────
-def fetch_elevator_outages() -> list:
+def fetch_elevator_outages() -> list | None:
+    """Current outages, or None when the feed couldn't be read (offline/simulated).
+
+    None is deliberately distinct from [] — "no outages" is a claim about the
+    stations, and must not be made when we never saw the data.
+    """
     if _simulate():
-        return []
+        return None
     try:
         return _parse_elevator_json(_mta_get(ELEVATOR_OUTAGES_URL))
     except Exception as exc:
         print(f"[mta_feed] elevator fetch error: {exc}")
-        return []
+        return None
 
 
 def _parse_elevator_json(data: list) -> list:
@@ -174,7 +209,7 @@ def _simulated_alerts() -> dict:
     """Minute-seeded, deterministic status for every line (offline fallback)."""
     now = datetime.now(timezone.utc)
     minute_seed = int(now.timestamp() // 60)
-    updated_at = now.strftime("%I:%M:%S %p")
+    updated_at = _now_str()
     result = {}
     for line in SUBWAY_LINE_IDS:
         seed_val = int(hashlib.md5(f"{line}{minute_seed}".encode()).hexdigest(), 16)
@@ -189,8 +224,9 @@ def _simulated_alerts() -> dict:
             sev, label = 2, "Service Change"
         else:
             sev, label = 3, "Suspended"
-        result[line] = {"severity": sev, "status": label,
-                        "message": STATUS_MESSAGES[sev], "updatedAt": updated_at}
+        # Tagged so answers built on it can say it isn't live data.
+        result[line] = {"severity": sev, "status": label, "message": STATUS_MESSAGES[sev],
+                        "updatedAt": updated_at, "source": "simulated"}
     return result
 
 
@@ -207,6 +243,8 @@ def status_summary(alerts: dict | None = None) -> str:
                 f"(severity {info.get('severity')}/3) — {info.get('message')}"
             )
     parts = []
+    if any(info.get("source") == "simulated" for info in alerts.values()):
+        parts.append("(Live MTA feed unavailable — showing simulated status.)")
     if affected:
         parts.append("Lines with active issues:\n" + "\n".join(affected))
     if good:

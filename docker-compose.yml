@@ -33,5 +33,12 @@ services:
       NAVIGATOR_ALERTS_HOST: alerts
       NAVIGATOR_ROUTING_HOST: routing
       NAVIGATOR_GEOCODE_HOST: geocode
+      # Reasoner: unset means the deterministic planner. Point at a hosted
+      # model with GEMINI_API_KEY, or at a local one on the host with
+      # NAVIGATOR_LLM_PROVIDER=ollama and
+      # NAVIGATOR_LLM_BASE_URL=http://host.docker.internal:11434
+      NAVIGATOR_LLM_PROVIDER: ${NAVIGATOR_LLM_PROVIDER:-auto}
+      NAVIGATOR_MODEL: ${NAVIGATOR_MODEL:-}
+      NAVIGATOR_LLM_BASE_URL: ${NAVIGATOR_LLM_BASE_URL:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}

@@ -19,7 +19,7 @@ from contextlib import asynccontextmanager
 
 from langgraph.graph import END, StateGraph
 
-from .llm import DeterministicPlanner, get_chat_model, _STATUS_WORDS
+from .llm import _STATUS_WORDS, DeterministicPlanner, get_chat_model
 from .nodes import _emit, compose_answer, make_understand_node
 from .state import AgentState
 from .tools import build_tools
@@ -38,7 +38,11 @@ def _needed_workers(state) -> list[str]:
     plan = list(_PLAN.get(state.get("intent", "other"), []))
     # Compound query: a trip question that also asks about delays/service gets the
     # Service Advisor after the Route Planner — genuine multi-agent collaboration.
-    if state.get("intent") == "route" and _STATUS_WORDS.search(state.get("question", "")):
+    # The LLM router says so directly; the regex planner infers it from wording.
+    flagged = state.get("needs_status")
+    if flagged is None:
+        flagged = bool(_STATUS_WORDS.search(state.get("question", "")))
+    if state.get("intent") == "route" and flagged:
         plan = ["route_planner", "service_advisor"]
     return plan
 
@@ -61,7 +65,7 @@ def make_synthesize_node():
         elif len(results) == 1:
             answer = results[0]["result"]
         else:
-            answer = " ".join(r["result"] for r in results if r.get("result"))
+            answer = "\n\n".join(r["result"] for r in results if r.get("result"))
         _emit({"node": "synthesize", "text": "Merged agent results into the final answer.",
                "answer": answer}, writer)
         return {"answer": answer, "steps": [{"node": "synthesize", "text": "synthesized"}]}
@@ -73,7 +77,7 @@ def build_graph(tools, llm=None, planner: DeterministicPlanner | None = None) ->
     """Uncompiled supervisor StateGraph wiring the understand → supervise ⇄ workers → synth topology."""
     planner = planner or DeterministicPlanner()
     builder = StateGraph(AgentState)
-    builder.add_node("understand", make_understand_node(planner))
+    builder.add_node("understand", make_understand_node(planner, llm))
     builder.add_node("supervise", make_supervisor_node())
     builder.add_node("synthesize", make_synthesize_node())
 
@@ -111,6 +115,13 @@ async def agent_session(transport: str = "inprocess", host: str | None = None,
         yield graph
 
 
+def _turn_input(question: str) -> dict:
+    """Input for one question. None resets the per-turn fields (see state.per_turn)
+    so a reused, checkpointed thread_id can't replay a previous turn's results."""
+    return {"question": question, "worker_results": None, "steps": None,
+            "intent": "", "route": "", "answer": "", "needs_status": None, "router": ""}
+
+
 def _config(thread_id: str) -> dict:
     return {"configurable": {"thread_id": thread_id}, "recursion_limit": 30}
 
@@ -121,7 +132,7 @@ async def run_once(question: str, *, thread_id: str = "default",
     """Answer one question end-to-end; returns the final state dict."""
     async with agent_session(transport, host, checkpoint_path) as graph:
         return await graph.ainvoke(
-            {"question": question, "messages": [], "worker_results": [], "steps": []},
+            _turn_input(question),
             config=_config(thread_id))
 
 
@@ -132,7 +143,7 @@ async def stream_once(question: str, *, thread_id: str = "default",
     async with agent_session(transport, host, checkpoint_path) as graph:
         final_state = None
         async for mode, chunk in graph.astream(
-            {"question": question, "messages": [], "worker_results": [], "steps": []},
+            _turn_input(question),
             config=_config(thread_id), stream_mode=["custom", "values"],
         ):
             if mode == "custom":

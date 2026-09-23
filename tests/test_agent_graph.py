@@ -3,7 +3,7 @@ import asyncio
 import os
 import tempfile
 
-from navigator.agent.graph import agent_session, run_once, _config
+from navigator.agent.graph import _config, agent_session, run_once
 
 
 def _answer(q, **kw):

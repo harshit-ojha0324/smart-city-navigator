@@ -8,8 +8,10 @@ aiosqlite==0.20.0            # 0.21+ dropped Connection.is_alive() the sqlite sa
 mcp>=1.9.0
 langchain-mcp-adapters>=0.1.7,<0.2   # 0.2 requires langchain-core 1.x
 
-# ── LLM + tracing (optional at runtime; agent falls back without a key) ─
+# ── LLM + tracing (all optional at runtime; the agent falls back to the
+#    deterministic planner when no provider is configured) ───────────────
 langchain-google-genai>=2.0.0
+langchain-ollama>=0.2,<0.3       # local models (0.3+ requires langchain-core 1.x)
 langsmith>=0.1.100
 
 # ── Gateway + data ─────────────────────────────────────────────────────

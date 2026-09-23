@@ -11,6 +11,9 @@ venv/
 .env
 .env.local
 
+# GTFS feed download cache (scripts/build_graph.py)
+.gtfs-cache/
+
 # Agent state
 *.sqlite
 checkpoints.sqlite

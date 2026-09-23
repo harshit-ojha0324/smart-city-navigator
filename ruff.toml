@@ -1,0 +1,12 @@
+target-version = "py310"
+line-length = 120
+extend-exclude = [".venv"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[lint.per-file-ignores]
+"src/navigator/core/graph_data.py" = ["E501"]  # one station per line reads best as data
+"eval/run_eval.py" = ["E402"]                  # sys.path set up before local imports
+"scripts/demo.py" = ["E402"]
+"src/navigator/gateway/app.py" = ["E501"]     # the inline demo page's HTML/CSS
