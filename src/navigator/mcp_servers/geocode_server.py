@@ -9,13 +9,13 @@ Run standalone:  python -m navigator.mcp_servers.geocode_server
 """
 from __future__ import annotations
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
 from navigator.core import geocode
 from navigator.mcp_servers import HOST, PORTS
 
-mcp = FastMCP("navigator-geocode", host=HOST, port=PORTS["geocode"])
+mcp = MCPServer("navigator-geocode")
 
 
 @mcp.tool(
@@ -83,4 +83,5 @@ def nearest_station(lat: float | str, lng: float | str) -> dict:
 
 
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http")
+    # mcp 2.x moved the bind address off the constructor and onto run().
+    mcp.run(transport="streamable-http", host=HOST, port=PORTS["geocode"])

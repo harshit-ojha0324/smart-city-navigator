@@ -12,28 +12,10 @@ import json
 import re
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
-from langgraph.types import StreamWriter
 
 from navigator.core.geocode import display_name, rider_lines
 
 from .llm import DeterministicPlanner, prompt_suffix
-
-
-def _emit(step: dict, writer: StreamWriter | None) -> None:
-    """Stream one reasoning step. On Python 3.10 the writer must be injected into
-    the node signature (get_stream_writer doesn't cross async tasks pre-3.11)."""
-    if writer is None:
-        try:
-            from langgraph.config import get_stream_writer
-
-            writer = get_stream_writer()
-        except Exception:
-            writer = None
-    if writer is not None:
-        try:
-            writer(step)
-        except Exception:
-            pass
 
 
 def message_text(content) -> str:
@@ -112,7 +94,7 @@ def make_understand_node(planner: DeterministicPlanner, llm=None):
     for a malformed reply, a refusal, or an unreachable endpoint — a flaky
     model degrades the routing, it never breaks the turn.
     """
-    async def understand(state, writer: StreamWriter = None) -> dict:
+    async def understand(state) -> dict:
         question = state["question"]
         routed = await classify_with_llm(llm, question) if llm is not None else None
         if routed is None:
@@ -123,7 +105,6 @@ def make_understand_node(planner: DeterministicPlanner, llm=None):
             router = "llm"
         step = {"node": "understand", "intent": intent, "router": router,
                 "text": f"Understood the question; intent = '{intent}' (routed by {router})."}
-        _emit(step, writer)
         # Every turn's question joins the thread's conversation history.
         return {"intent": intent, "needs_status": needs_status, "router": router,
                 "steps": [step], "messages": [HumanMessage(content=question)]}

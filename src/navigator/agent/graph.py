@@ -20,7 +20,7 @@ from contextlib import asynccontextmanager
 from langgraph.graph import END, StateGraph
 
 from .llm import _STATUS_WORDS, DeterministicPlanner, get_chat_model
-from .nodes import _emit, compose_answer, make_understand_node
+from .nodes import compose_answer, make_understand_node
 from .state import AgentState
 from .tools import build_tools
 from .workers import WORKER_SPECS, build_worker, make_worker_node
@@ -48,17 +48,17 @@ def _needed_workers(state) -> list[str]:
 
 
 def make_supervisor_node():
-    async def supervise(state, writer=None) -> dict:
+    async def supervise(state) -> dict:
         done = {w["agent"] for w in state.get("worker_results", [])}
         nxt = next((w for w in _needed_workers(state) if w not in done), "synthesize")
-        _emit({"node": "supervisor", "text": f"Supervisor routing to: {nxt}"}, writer)
-        return {"route": nxt, "steps": [{"node": "supervisor", "text": f"route → {nxt}"}]}
+        return {"route": nxt,
+                "steps": [{"node": "supervisor", "text": f"Supervisor routing to: {nxt}"}]}
 
     return supervise
 
 
 def make_synthesize_node():
-    async def synthesize(state, writer=None) -> dict:
+    async def synthesize(state) -> dict:
         results = state.get("worker_results", [])
         if not results:
             answer = compose_answer(state.get("intent", "other"), [], state["question"])
@@ -66,9 +66,9 @@ def make_synthesize_node():
             answer = results[0]["result"]
         else:
             answer = "\n\n".join(r["result"] for r in results if r.get("result"))
-        _emit({"node": "synthesize", "text": "Merged agent results into the final answer.",
-               "answer": answer}, writer)
-        return {"answer": answer, "steps": [{"node": "synthesize", "text": "synthesized"}]}
+        return {"answer": answer,
+                "steps": [{"node": "synthesize",
+                           "text": "Merged agent results into the final answer."}]}
 
     return synthesize
 
@@ -139,15 +139,25 @@ async def run_once(question: str, *, thread_id: str = "default",
 async def stream_once(question: str, *, thread_id: str = "default",
                       transport: str = "inprocess", host: str | None = None,
                       checkpoint_path: str = ":memory:"):
-    """Yield reasoning events (dicts) as the agents work, then a final 'answer' event."""
+    """Yield reasoning events (dicts) as the agents work, then a final 'answer' event.
+
+    The events are the `steps` each node appends to state, streamed in
+    `updates` mode as that node finishes. An earlier version pushed them
+    through LangGraph's custom stream writer, which depends on contextvars
+    reaching the node's task — that silently stopped working for async nodes,
+    and a stream that fails by going quiet is worse than one that never
+    existed. Reading them off the state updates has no such dependency.
+    """
     async with agent_session(transport, host, checkpoint_path) as graph:
         final_state = None
         async for mode, chunk in graph.astream(
             _turn_input(question),
-            config=_config(thread_id), stream_mode=["custom", "values"],
+            config=_config(thread_id), stream_mode=["updates", "values"],
         ):
-            if mode == "custom":
-                yield chunk
+            if mode == "updates":
+                for update in (chunk or {}).values():
+                    for step in (update or {}).get("steps") or []:
+                        yield step
             elif mode == "values":
                 final_state = chunk
         yield {"node": "done", "answer": (final_state or {}).get("answer", "")}

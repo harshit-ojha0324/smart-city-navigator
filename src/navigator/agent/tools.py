@@ -1,8 +1,8 @@
 """
 Tool loading for the agent, in two interchangeable transports:
 
-  * "mcp"       — connect to the 3 FastMCP servers over streamable HTTP via
-                  langchain-mcp-adapters (the production path the gateway uses).
+  * "mcp"       — connect to the 3 MCP servers over streamable HTTP (the
+                  production path the gateway uses), via `mcp_client.py`.
   * "inprocess" — the *same* server tool functions wrapped as LangChain tools,
                   skipping the network hop (fast, hermetic path for tests/CI).
 
@@ -58,12 +58,12 @@ _MCP_TOOL_CACHE: dict[str | None, list] = {}
 
 
 async def load_mcp_tools(host: str | None = None) -> list:
-    """Load tools from the 3 live FastMCP servers over streamable HTTP."""
+    """Load tools from the 3 live MCP servers over streamable HTTP."""
     if host not in _MCP_TOOL_CACHE:
-        from langchain_mcp_adapters.client import MultiServerMCPClient
+        from .mcp_client import load_tools
 
-        client = MultiServerMCPClient(all_server_urls(host))
-        _MCP_TOOL_CACHE[host] = await client.get_tools()
+        _MCP_TOOL_CACHE[host] = await load_tools(
+            {name: cfg["url"] for name, cfg in all_server_urls(host).items()})
     return list(_MCP_TOOL_CACHE[host])
 
 

@@ -22,12 +22,11 @@ from dataclasses import dataclass
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
-from langgraph.types import StreamWriter
 
 from navigator.core.graph_data import feed_line
 
 from .llm import DeterministicPlanner, prompt_suffix
-from .nodes import _emit, compose_answer, last_ai, message_text, tool_results
+from .nodes import compose_answer, last_ai, message_text, tool_results
 from .state import WorkerState
 
 # A model that keeps calling tools instead of answering will loop until the
@@ -173,11 +172,12 @@ def _route_lines(worker_results: list[dict]) -> list[str]:
 
 def make_worker_node(spec: WorkerSpec, subgraph):
     """A supervisor node that delegates the task to one worker agent's subgraph."""
-    async def node(state, writer: StreamWriter = None) -> dict:
+    async def node(state) -> dict:
         lines = _route_lines(state.get("worker_results", [])) if spec.name == "service_advisor" else []
 
         handoff = f" Hand-off: route uses lines {', '.join(lines)}." if lines else ""
-        _emit({"node": spec.name, "text": f"Supervisor → {spec.name}: delegating the task.{handoff}"}, writer)
+        delegating = {"node": spec.name,
+                      "text": f"Supervisor → {spec.name}: delegating the task.{handoff}"}
         prompt = state["question"]
         if lines:  # the LLM path gets the same hand-off as the deterministic one
             prompt += (f"\n\n[From the Route Planner agent: the planned route rides the "
@@ -190,18 +190,18 @@ def make_worker_node(spec: WorkerSpec, subgraph):
                 "result": "", "data": {},
             })
         except Exception as exc:  # one agent failing must not take down the turn
-            _emit({"node": spec.name, "text": f"{spec.name} failed: {type(exc).__name__}"}, writer)
             return {
                 "worker_results": [{"agent": spec.name, "data": {}, "result":
                                     "I couldn't complete that lookup — try asking again, "
                                     "or rephrase the station or line."}],
-                "steps": [{"node": spec.name, "text": f"failed: {type(exc).__name__}"}],
+                "steps": [delegating,
+                          {"node": spec.name, "text": f"{spec.name} failed: {type(exc).__name__}"}],
             }
         result = out.get("result", "")
-        _emit({"node": spec.name, "text": f"{spec.name} finished: {result[:70]}"}, writer)
         return {
             "worker_results": [{"agent": spec.name, "result": result, "data": out.get("data", {})}],
-            "steps": [{"node": spec.name, "text": result[:100]}],
+            "steps": [delegating,
+                      {"node": spec.name, "text": f"{spec.name} finished: {result[:70]}"}],
         }
 
     return node

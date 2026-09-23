@@ -1,5 +1,5 @@
-"""End-to-end over the real transport: boot the 3 FastMCP servers as separate
-processes speaking streamable HTTP, load their tools with langchain-mcp-adapters,
+"""End-to-end over the real transport: boot the 3 MCP servers as separate
+processes speaking streamable HTTP, load their tools through our own MCP client,
 and answer questions through the full supervisor graph.
 
 The other tests use the in-process transport; this one proves the resume's

@@ -236,7 +236,7 @@ def test_inprocess_tools_mirror_mcp_server_schemas():
         out = {}
         for server in (alerts_server, routing_server, geocode_server):
             for t in await server.mcp.list_tools():
-                out[t.name] = set(t.inputSchema.get("properties", {}))
+                out[t.name] = set(t.input_schema.get("properties", {}))
         return out
 
     mcp = asyncio.run(mcp_tools())

@@ -1,4 +1,4 @@
-"""In-memory tests of the three FastMCP servers (no HTTP transport needed)."""
+"""In-memory tests of the three MCP servers (no HTTP transport needed)."""
 import asyncio
 import json
 
@@ -6,9 +6,13 @@ from navigator.mcp_servers import alerts_server, geocode_server, routing_server
 
 
 def call(server, name, args):
+    """Invoke a tool in-process and decode its JSON payload.
+
+    mcp 2.x returns a CallToolResult carrying content blocks; v1 returned the
+    blocks directly."""
     res = asyncio.run(server.mcp.call_tool(name, args))
-    # FastMCP returns [TextContent(text=<json>)] for dict/list tool returns.
-    payload = res[0] if isinstance(res, (list, tuple)) else res
+    blocks = getattr(res, "content", res)
+    payload = blocks[0] if isinstance(blocks, (list, tuple)) else blocks
     text = getattr(payload, "text", None)
     return json.loads(text) if text else payload
 
