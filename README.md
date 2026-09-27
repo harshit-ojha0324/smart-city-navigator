@@ -101,13 +101,13 @@ Each wraps one slice of the transit core and is independently runnable
 | Server | Port | Tools |
 |---|---|---|
 | **alerts** | 8071 | `get_service_status`, `get_line_status`, `list_elevator_outages` |
-| **routing** | 8072 | `plan_trip`, `plan_trip_by_id`, `list_stations` |
+| **routing** | 8072 | `plan_trip`, `list_stations` |
 | **geocode** | 8073 | `geocode_place`, `resolve_station`, `nearest_station` |
 
 ## Quickstart
 
 ```bash
-make install          # venv + dependencies
+make install          # venv + deps from requirements.lock (hash-pinned)
 make test             # 109 tests, incl. the 3 MCP servers booted over HTTP
 make lint             # ruff
 make eval             # core 20-prompt suite
@@ -276,8 +276,9 @@ mine rather than the model's:
 
 - a tool schema that rejected `line=7` as an integer — the agent then spent every
   retry re-sending the same rejected call;
-- two near-identical tools (`plan_trip` / `plan_trip_by_id`) that invited the model
-  to mix their argument names;
+- two near-identical tools (`plan_trip` / `plan_trip_by_id`) that invited the model to
+  mix their argument names — `plan_trip_by_id` has since been deleted, because
+  `plan_trip` takes ids as well as names and the second tool bought nothing;
 - a tool loop with no cap, which ran to the graph's recursion limit and killed an
   entire eval run.
 
@@ -329,6 +330,12 @@ tests/           109 unit + integration tests (incl. live MCP-over-HTTP and the 
 - **Agents hand off context, not just turns.** On a compound question the supervisor
   passes the lines of the Route Planner's itinerary to the Service Advisor, which
   checks exactly those lines instead of dumping all 23 (`tests/test_regressions.py`).
+- **Installs are pinned by hash.** `requirements*.txt` carry the bounds that may be
+  upgraded; `requirements.lock` is the resolved, hash-pinned set that CI and Docker
+  actually install (`make lock` regenerates it). Bounds stop an unannounced major from
+  entering — a fresh install of `mcp>=1.9.0` once took the build down on a docs-only
+  commit — but only a lockfile records what a build resolved, which is also what makes
+  the dependency tree auditable.
 - **No adapter in the critical path.** `langchain-mcp-adapters` pins `mcp<2.0.0`,
   so keeping it meant staying on the v1 SDK. The MCP client is now sixty lines in
   `agent/mcp_client.py`: list each server's tools, wrap them as LangChain tools from

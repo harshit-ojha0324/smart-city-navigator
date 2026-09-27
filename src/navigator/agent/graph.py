@@ -98,12 +98,6 @@ def build_graph(tools, llm=None, planner: DeterministicPlanner | None = None) ->
     return builder
 
 
-async def build_compiled(transport: str = "inprocess", host: str | None = None, checkpointer=None):
-    tools = await build_tools(transport, host)
-    llm = get_chat_model()
-    return build_graph(tools, llm).compile(checkpointer=checkpointer)
-
-
 @asynccontextmanager
 async def agent_session(transport: str = "inprocess", host: str | None = None,
                         checkpoint_path: str = ":memory:"):
@@ -111,8 +105,8 @@ async def agent_session(transport: str = "inprocess", host: str | None = None,
     from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
     async with AsyncSqliteSaver.from_conn_string(checkpoint_path) as saver:
-        graph = await build_compiled(transport, host, checkpointer=saver)
-        yield graph
+        tools = await build_tools(transport, host)
+        yield build_graph(tools, get_chat_model()).compile(checkpointer=saver)
 
 
 def _turn_input(question: str) -> dict:

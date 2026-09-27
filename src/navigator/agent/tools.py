@@ -25,7 +25,6 @@ _SERVER_FUNCTIONS = [
     alerts_server.get_line_status,
     alerts_server.list_elevator_outages,
     routing_server.plan_trip,
-    routing_server.plan_trip_by_id,
     routing_server.list_stations,
     geocode_server.geocode_place,
     geocode_server.resolve_station,
@@ -62,8 +61,7 @@ async def load_mcp_tools(host: str | None = None) -> list:
     if host not in _MCP_TOOL_CACHE:
         from .mcp_client import load_tools
 
-        _MCP_TOOL_CACHE[host] = await load_tools(
-            {name: cfg["url"] for name, cfg in all_server_urls(host).items()})
+        _MCP_TOOL_CACHE[host] = await load_tools(all_server_urls(host))
     return list(_MCP_TOOL_CACHE[host])
 
 

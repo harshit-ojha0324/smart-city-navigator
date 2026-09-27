@@ -21,9 +21,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - name: Install
+        # From the lockfile, not the ranges: hash-pinned and identical to what
+        # was tested locally. requirements*.txt stay the source of truth for
+        # what may be upgraded; `make lock` regenerates this.
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+          pip install --require-hashes -r requirements.lock
       - name: Lint
         run: ruff check .
       - name: Unit + integration tests (incl. live MCP servers over streamable HTTP)

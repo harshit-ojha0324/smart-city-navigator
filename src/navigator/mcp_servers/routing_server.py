@@ -75,22 +75,6 @@ def plan_trip(origin: str | int, destination: str | int) -> dict:
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title="Plan a subway trip (by station id)",
-        readOnlyHint=True,
-        openWorldHint=False,
-    )
-)
-def plan_trip_by_id(origin_id: str | int, destination_id: str | int) -> dict:
-    """Plan a trip between two known station ids. Prefer `plan_trip`, which
-    takes ids as well as names; this exists for callers that already have ids."""
-    try:
-        return routing.plan_route(str(origin_id), str(destination_id))
-    except routing.RouteError as exc:
-        return {"error": str(exc), "found": False}
-
-
-@mcp.tool(
-    annotations=ToolAnnotations(
         title="List modeled stations",
         readOnlyHint=True,
         openWorldHint=False,

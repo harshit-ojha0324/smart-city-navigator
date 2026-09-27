@@ -23,8 +23,6 @@ _DATA = Path(__file__).parent / "data" / "subway_graph.json"
 
 _graph = json.loads(_DATA.read_text())
 
-GTFS_SOURCE: str = _graph["source"]
-
 # Each STATION: id, name, lat, lng, lines[], complex
 STATIONS: list[dict] = _graph["stations"]
 
@@ -85,11 +83,6 @@ def same_complex(a_id: str, b_id: str) -> bool:
     """Whether two stations are platforms of the same station complex."""
     a, b = STATION_BY_ID.get(a_id), STATION_BY_ID.get(b_id)
     return bool(a and b and a["complex"] == b["complex"])
-
-
-def line_color(line_id: str) -> str:
-    """Hex color for a subway line, or a neutral gray if unknown."""
-    return SUBWAY_LINES.get(line_id, {}).get("color", "#6B7280")
 
 
 def line_label(line_id: str) -> str:

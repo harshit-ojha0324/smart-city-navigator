@@ -1,5 +1,4 @@
 from navigator.core import mta_feed
-from navigator.core.cache import TTLCache
 
 
 def test_simulated_alerts_cover_all_lines():
@@ -28,18 +27,18 @@ def test_status_summary_is_text():
     assert isinstance(s, str) and len(s) > 0
 
 
-def test_ttl_cache_memory_backend():
-    c = TTLCache(redis_url=None)
-    assert c.backend == "memory"
-    c.set("k", {"v": 1}, ttl=60)
-    assert c.get("k") == {"v": 1}
-    c.delete("k")
-    assert c.get("k") is None
+def test_alerts_are_cached_until_the_ttl_expires(monkeypatch):
+    """The cache is one tuple now; it must still hold for ALERTS_TTL and then refetch."""
+    calls = []
+    monkeypatch.setattr(mta_feed, "_simulated_alerts",
+                        lambda: calls.append(1) or {"L": {"severity": 0}})
+    monkeypatch.setattr(mta_feed, "_cached", None)
+    monkeypatch.setenv("NAVIGATOR_SIMULATE_FEED", "1")
 
+    mta_feed.fetch_alerts()
+    mta_feed.fetch_alerts()
+    assert len(calls) == 1, "second call inside the TTL must come from cache"
 
-def test_ttl_cache_expiry():
-    c = TTLCache(redis_url=None)
-    c.set("k", 42, ttl=0)  # ttl=0 → no expiry sentinel; still retrievable
-    assert c.get("k") == 42
-    c._mem["k2"] = (99, 1.0)  # already-expired timestamp
-    assert c.get("k2") is None
+    monkeypatch.setattr(mta_feed, "_cached", (0.0, {"stale": True}))  # expired
+    mta_feed.fetch_alerts()
+    assert len(calls) == 2, "an expired entry must be refetched"

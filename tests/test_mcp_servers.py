@@ -67,5 +67,5 @@ def test_all_servers_expose_expected_tools():
         return {t.name for t in await server.mcp.list_tools()}
 
     assert {"get_service_status", "get_line_status", "list_elevator_outages"} <= asyncio.run(names(alerts_server))
-    assert {"plan_trip", "plan_trip_by_id", "list_stations"} <= asyncio.run(names(routing_server))
+    assert {"plan_trip", "list_stations"} <= asyncio.run(names(routing_server))
     assert {"geocode_place", "resolve_station", "nearest_station"} <= asyncio.run(names(geocode_server))

@@ -1,4 +1,4 @@
-.PHONY: help venv install test eval eval-heldout eval-fresh eval-mcp graph servers gateway run demo lint clean
+.PHONY: help venv install lock test eval eval-heldout eval-fresh eval-mcp graph servers gateway run demo lint clean
 
 PY ?= python3
 VENV := .venv
@@ -7,7 +7,8 @@ export PYTHONPATH := $(PWD)/src
 
 help:
 	@echo "Smart City Navigator — make targets"
-	@echo "  install    create venv + install deps"
+	@echo "  install    create venv + install from requirements.lock"
+	@echo "  lock       re-resolve requirements*.txt into requirements.lock"
 	@echo "  test       run the pytest suite"
 	@echo "  lint       ruff check"
 	@echo "  eval       run the core 20-prompt eval suite (in-process)"
@@ -25,7 +26,12 @@ $(VENV):
 
 install: $(VENV)
 	$(BIN)/pip install -q --upgrade pip
-	$(BIN)/pip install -q -r requirements-dev.txt
+	$(BIN)/pip install -q --require-hashes -r requirements.lock
+
+# Resolve requirements*.txt into the hash-pinned lockfile CI and Docker install.
+# Run after changing a version bound; commit the result.
+lock:
+	uv pip compile requirements-dev.txt --universal --generate-hashes -o requirements.lock
 
 test:
 	$(BIN)/pytest -q

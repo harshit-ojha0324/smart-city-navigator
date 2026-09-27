@@ -32,9 +32,6 @@ def server_url(name: str, host: str | None = None) -> str:
     return f"http://{host or _host_for(name)}:{PORTS[name]}/mcp"
 
 
-def all_server_urls(host: str | None = None) -> dict[str, dict]:
-    """Per-server endpoint config consumed by `agent/mcp_client.py`."""
-    return {
-        name: {"url": server_url(name, host), "transport": "streamable_http"}
-        for name in PORTS
-    }
+def all_server_urls(host: str | None = None) -> dict[str, str]:
+    """Each server's streamable-HTTP endpoint, for `agent/mcp_client.py`."""
+    return {name: server_url(name, host) for name in PORTS}

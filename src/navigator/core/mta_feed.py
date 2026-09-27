@@ -14,11 +14,10 @@ from __future__ import annotations
 
 import hashlib
 import os
+import time
 from datetime import datetime, timezone
 
 import requests
-
-from .cache import TTLCache
 
 # ── Feed URLs ──────────────────────────────────────────────────────────
 _BASE = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds"
@@ -57,8 +56,12 @@ STATUS_MESSAGES = {
 # tool-failure eval scenarios and by CI, which has no outbound network).
 _SIMULATE_ENV = "NAVIGATOR_SIMULATE_FEED"
 
-_cache = TTLCache(os.environ.get("REDIS_URL"))
 ALERTS_TTL = int(os.environ.get("ALERTS_TTL", "30"))
+
+# One key, one TTL, one process. This was a Redis-or-memory cache class whose
+# Redis half could never run — redis was never a dependency, so the import
+# always failed and the memory path always won.
+_cached: tuple[float, dict] | None = None
 
 
 try:
@@ -102,10 +105,9 @@ def _simulate() -> bool:
 # ── Service alerts ─────────────────────────────────────────────────────
 def fetch_alerts(*, use_cache: bool = True) -> dict:
     """Return {line_id: {severity, status, message, updatedAt}} for all lines."""
-    if use_cache:
-        cached = _cache.get("alerts")
-        if cached is not None:
-            return cached
+    global _cached
+    if use_cache and _cached is not None and time.monotonic() < _cached[0]:
+        return _cached[1]
 
     if _simulate():
         result = _simulated_alerts()
@@ -117,7 +119,7 @@ def fetch_alerts(*, use_cache: bool = True) -> dict:
             result = _simulated_alerts()
 
     if use_cache:
-        _cache.set("alerts", result, ttl=ALERTS_TTL)
+        _cached = (time.monotonic() + ALERTS_TTL, result)
     return result
 
 

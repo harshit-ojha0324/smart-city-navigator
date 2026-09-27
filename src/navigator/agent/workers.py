@@ -62,7 +62,7 @@ WORKER_SPECS: list[WorkerSpec] = [
         persona=("You are the Route Planner agent. You own trip planning: resolve the "
                  "origin and destination, then plan the fastest subway route and describe "
                  "the legs and transfers. Never invent a route."),
-        tool_names=("plan_trip", "plan_trip_by_id", "geocode_place", "resolve_station", "list_stations"),
+        tool_names=("plan_trip", "geocode_place", "resolve_station", "list_stations"),
         intent="route",
     ),
     WorkerSpec(

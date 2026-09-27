@@ -151,7 +151,7 @@ def compose_answer(intent: str, results: list[tuple[str, object]], question: str
                 "Try rephrasing, or ask about a different station or line.")
     p = payload
 
-    if name in {"plan_trip", "plan_trip_by_id"}:
+    if name == "plan_trip":
         if p.get("needs_disambiguation"):
             bits = []
             for label in ("origin", "destination"):
