@@ -7,7 +7,6 @@ Run the eval sets against the agent and report pass rates.
     python eval/run_eval.py --set all
     python eval/run_eval.py --transport mcp     # through the live MCP servers
     python eval/run_eval.py --category ambiguous
-    python eval/run_eval.py --langsmith         # also log a scored LangSmith run
 
 Scores from the two sets are reported separately: the core suite was written
 alongside the planner, the held-out one after it was frozen, and the gap
@@ -47,6 +46,10 @@ def _reasoner() -> str:
 
 
 def _enable_langsmith_tracing() -> bool:
+    """Turn on tracing when a key exists: every node and tool call then shows up
+    in LangSmith. Their hosted eval experiments are deliberately not wired —
+    grading happens locally in graders.py against ground truth, and a second
+    copy of that logic upstream is one more thing to keep honest."""
     key = os.environ.get("LANGSMITH_API_KEY") or os.environ.get("LANGCHAIN_API_KEY")
     if not key:
         return False
@@ -112,52 +115,12 @@ def _print_report(results) -> float:
     return rate
 
 
-def _maybe_langsmith(cases, transport):
-    """Create/refresh a LangSmith dataset and run a scored experiment.
-
-    Entirely optional: without a valid key this reports why and returns, rather
-    than failing a run whose local scores are already printed.
-    """
-    try:
-        from langsmith import Client, evaluate
-    except Exception as exc:
-        print(f"[langsmith] SDK unavailable: {exc}")
-        return
-    from graders import langsmith_correctness
-
-    from navigator.agent.graph import run_once
-
-    def target(inputs: dict) -> dict:
-        state = asyncio.run(run_once(inputs["question"], transport=transport))
-        return {"answer": state.get("answer", ""), "intent": state.get("intent", ""),
-                "state": state}
-
-    ds_name = "smart-city-navigator-eval"
-    try:
-        client = Client()
-        if not client.has_dataset(dataset_name=ds_name):
-            ds = client.create_dataset(ds_name, description="Smart City Navigator eval set")
-            client.create_examples(
-                inputs=[{"question": c["question"]} for c in cases],
-                outputs=[c["expect"] for c in cases],
-                metadata=[{"case": c} for c in cases],
-                dataset_id=ds.id,
-            )
-        evaluate(target, data=ds_name, evaluators=[langsmith_correctness],
-                 experiment_prefix="scn-eval")
-    except Exception as exc:
-        print(f"[langsmith] skipped: {type(exc).__name__}: {str(exc).splitlines()[0]}")
-        return
-    print(f"[langsmith] logged scored experiment on dataset '{ds_name}'")
-
-
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--set", dest="which", choices=list(SETS), default="core",
                     help="core (tuned on), heldout (never tuned on), or all")
     ap.add_argument("--transport", choices=["inprocess", "mcp"], default="inprocess")
     ap.add_argument("--category", choices=[*CATEGORIES, "all"], default="all")
-    ap.add_argument("--langsmith", action="store_true", help="also log a scored LangSmith run")
     ap.add_argument("--threshold", type=float, default=0.9, help="min pass rate for exit 0")
     args = ap.parse_args()
 
@@ -173,9 +136,6 @@ def main() -> int:
           f"reasoner={_reasoner()} | feed_simulated={os.environ.get('NAVIGATOR_SIMULATE_FEED')}")
     results = asyncio.run(_run_all(cases, args.transport))
     rate = _print_report(results)
-
-    if args.langsmith:
-        _maybe_langsmith(cases, args.transport)
 
     return 0 if rate >= args.threshold else 1
 

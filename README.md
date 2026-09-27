@@ -6,7 +6,7 @@ a **supervisor** delegates each question to independent specialist agents
 servers** (live GTFS-RT alerts, transfer-aware Dijkstra routing, geocoding) speaking the
 **Model Context Protocol over streamable HTTP**, exposed through a **Flask
 Server-Sent-Events gateway** that streams the agents' reasoning live, and measured by
-**four separately-scored eval sets** with **LangSmith tracing**.
+**four separately-scored eval sets**, with **LangSmith tracing** available behind a key.
 
 Ask *"How do I get from Times Square to Coney Island?"* and watch the agents
 route the question, call the tools, and synthesize a grounded itinerary — never a
@@ -79,7 +79,7 @@ endpoint. A flaky model degrades the routing; it never breaks the turn.
 | **3 MCP tool servers** (GTFS-RT alerts, Dijkstra routing, geocoding) over **streamable HTTP** | [`mcp_servers/`](src/navigator/mcp_servers/); booted as real processes and queried over HTTP in [`tests/test_mcp_http.py`](tests/test_mcp_http.py) |
 | LLM acts on real-time MTA data **through a standardized protocol** | [`agent/mcp_client.py`](src/navigator/agent/mcp_client.py) speaks MCP to the servers and wraps each tool for LangChain — [`agent/tools.py`](src/navigator/agent/tools.py) |
 | **Flask gateway** with **Server-Sent Events** for live agent-reasoning visibility | [`gateway/app.py`](src/navigator/gateway/app.py) |
-| **LangSmith tracing** + eval sets (happy paths, ambiguous queries, tool-failure handling), graded against ground truth | [`eval/`](eval/) |
+| Eval sets (happy paths, ambiguous queries, tool-failure handling) graded against ground truth; **LangSmith tracing** when a key is set | [`eval/`](eval/), [`run_eval.py`](eval/run_eval.py) |
 | Fault-tolerant execution / graceful degradation | SqliteSaver checkpoints (resumable) + GTFS-RT simulation fallback ([`core/mta_feed.py`](src/navigator/core/mta_feed.py)) |
 
 ## The specialist agents
@@ -199,8 +199,7 @@ ollama pull qwen3:8b
 export NAVIGATOR_LLM_PROVIDER=ollama NAVIGATOR_MODEL=qwen3:8b
 make eval
 
-export LANGSMITH_API_KEY=...          # every node/tool call becomes traceable
-python eval/run_eval.py --langsmith   # scored experiment logged to LangSmith
+export LANGSMITH_API_KEY=...   # every node and tool call becomes traceable in LangSmith
 ```
 
 Every eval report names the reasoner that produced it (`reasoner=ollama:qwen3:8b`),
@@ -301,7 +300,7 @@ src/navigator/
   agent/         supervisor graph, specialist worker agents, state, LLM factory + planner, tool loading
   gateway/       Flask JSON + SSE gateway (+ live demo page)
   core/data/     subway_graph.json — the network, generated from the MTA GTFS feed
-eval/            four prompt sets, ground-truth graders, runner (LangSmith optional)
+eval/            four prompt sets, ground-truth graders, runner
 scripts/         build_graph.py (GTFS → graph), run_all.sh (servers + gateway), demo.py (CLI)
 tests/           109 unit + integration tests (incl. live MCP-over-HTTP and the LLM path)
 ```
@@ -373,8 +372,12 @@ tests/           109 unit + integration tests (incl. live MCP-over-HTTP and the 
 Stated plainly, because a reviewer will find them anyway:
 
 - **Not cloud-deployed.** It runs locally (`make run`) or under `docker compose`.
-- **LangSmith is wired but unrun.** `--langsmith` works and degrades cleanly without
-  a key, but there is no trace screenshot and no token-cost number behind it.
+- **LangSmith tracing is wired but unrun.** Setting `LANGSMITH_API_KEY` turns on tracing
+  for every node and tool call, but no trace has been captured here, so there is no
+  screenshot and no token-cost figure. Their hosted eval experiments are deliberately
+  not wired: grading is local and against ground truth, and a second copy of that logic
+  upstream would be one more thing to keep honest. Scores in this README come from
+  `eval/graders.py`, not from LangSmith.
 - **No hosted-model numbers.** The model column is a local `qwen3:8b`; Gemini is
   supported and untested.
 - **No departure-time model.** Segment weights are median run times, so the planner

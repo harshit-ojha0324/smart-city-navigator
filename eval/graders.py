@@ -212,14 +212,3 @@ def _grade_geocode(expect, answer) -> tuple[bool, str]:
     if truth.lower() not in answer.lower():
         return False, f"nearest station is {truth}, answer said otherwise"
     return True, f"nearest station {truth}"
-
-
-# ── LangSmith evaluator adapter ────────────────────────────────────────
-def langsmith_correctness(run, example) -> dict:
-    """LangSmith evaluator: score 1/0 using the same graders."""
-    outputs = run.outputs or {}
-    state = outputs.get("state") or {"answer": outputs.get("answer", ""),
-                                     "intent": outputs.get("intent", "")}
-    case = (example.metadata or {}).get("case") or {"expect": (example.outputs or {})}
-    passed, reason = grade(case, state)
-    return {"key": "correctness", "score": 1 if passed else 0, "comment": reason}
