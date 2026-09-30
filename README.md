@@ -108,7 +108,7 @@ Each wraps one slice of the transit core and is independently runnable
 
 ```bash
 make install          # venv + deps from requirements.lock (hash-pinned)
-make test             # 109 tests, incl. the 3 MCP servers booted over HTTP
+make test             # 110 tests, incl. the 3 MCP servers booted over HTTP
 make lint             # ruff
 make eval             # core 20-prompt suite
 make eval-all         # all four sets (70 prompts)
@@ -302,7 +302,7 @@ src/navigator/
   core/data/     subway_graph.json — the network, generated from the MTA GTFS feed
 eval/            four prompt sets, ground-truth graders, runner
 scripts/         build_graph.py (GTFS → graph), run_all.sh (servers + gateway), demo.py (CLI)
-tests/           109 unit + integration tests (incl. live MCP-over-HTTP and the LLM path)
+tests/           110 unit + integration tests (incl. live MCP-over-HTTP and the LLM path)
 ```
 
 ## Design notes
