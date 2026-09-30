@@ -3,9 +3,8 @@ LLM factory + deterministic offline planner.
 
 Two ways the agent can reason, and the choice is one env var:
 
-  * A tool-calling chat model — Gemini, any OpenAI-compatible endpoint, or a
-    local Ollama model. It classifies the question, picks the tools, and writes
-    the answer.
+  * A tool-calling chat model — Gemini or a local Ollama model. It classifies
+    the question, picks the tools, and writes the answer.
   * A deterministic planner when no model is configured — regex intent + entity
     extraction emitting the same tool calls, so the graph, the MCP servers and
     the eval suite run end-to-end in CI with no key, no network and no
@@ -15,9 +14,9 @@ Both drive the identical graph topology and the identical MCP tools; only the
 "which tool, which args" decision differs. `describe_reasoner()` names whichever
 is active, so an eval score can never be ambiguous about what produced it.
 
-    NAVIGATOR_LLM_PROVIDER = auto (default) | gemini | ollama | openai | none
+    NAVIGATOR_LLM_PROVIDER = auto (default) | gemini | ollama | none
     NAVIGATOR_MODEL        = model id for the chosen provider
-    NAVIGATOR_LLM_BASE_URL = endpoint for ollama / OpenAI-compatible servers
+    NAVIGATOR_LLM_BASE_URL = endpoint for ollama
 """
 from __future__ import annotations
 
@@ -27,7 +26,6 @@ import re
 _DEFAULT_MODELS = {
     "gemini": "gemini-2.5-flash",
     "ollama": "qwen3:8b",
-    "openai": "gpt-4o-mini",
 }
 
 # Subway line tokens, longest first so "SIR" would beat "S" if added later.
@@ -98,8 +96,6 @@ def active_provider() -> str:
         return choice
     if _gemini_key():
         return "gemini"
-    if os.environ.get("OPENAI_API_KEY"):
-        return "openai"
     return "none"
 
 
@@ -156,12 +152,6 @@ def get_chat_model():
                 # Ollama's 2k default silently truncates them.
                 num_ctx=int(os.environ.get("NAVIGATOR_NUM_CTX", "8192")),
             )
-
-        if provider == "openai":
-            from langchain_openai import ChatOpenAI
-
-            return ChatOpenAI(model=model_name(provider), temperature=temperature,
-                              base_url=os.environ.get("NAVIGATOR_LLM_BASE_URL") or None)
     except Exception as exc:  # pragma: no cover - depends on optional extras
         print(f"[llm] {provider} unavailable ({exc}) — using the deterministic planner")
     return None
