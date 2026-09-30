@@ -92,11 +92,6 @@ input:focus-visible,textarea:focus-visible,select:focus-visible {
   padding:53px 0 42px}
 .hero-copy {
   flex:1}
-.eyebrow {
-  font-size:10px;
-  letter-spacing:1.65px;
-  font-weight:700;
-  margin:0 0 18px}
 h1,h2,h3 {
   text-wrap:balance}
 .hero h1 {
@@ -105,8 +100,6 @@ h1,h2,h3 {
   letter-spacing:-2.6px;
   font-weight:650;
   margin:0 0 22px}
-.hero h1 span {
-  color:#6a8174}
 .intro {
   color:var(--muted);
   font-size:15px;
@@ -119,14 +112,6 @@ h1,h2,h3 {
 .network-art svg {
   display:block;
   width:100%}
-.art-caption {
-  display:block;
-  text-align:right;
-  font-size:8px;
-  font-weight:650;
-  letter-spacing:1.7px;
-  margin:18px 4px 0;
-  color:#6f7c73}
 .workspace {
   display:grid;
   grid-template-columns:minmax(0,1.65fr) minmax(240px,1fr);
@@ -325,9 +310,6 @@ textarea {
   display:flex;
   align-items:center;
   gap:11px}
-.small-arrow {
-  font-size:23px;
-  font-weight:400}
 .guide h2 {
   font-size:22px;
   font-weight:600;
@@ -344,11 +326,6 @@ textarea {
   gap:16px;
   padding:19px 0;
   border-top:1px solid var(--line)}
-.guide-number {
-  font-family:ui-monospace,monospace;
-  font-size:10px;
-  color:#6a8174;
-  padding-top:4px}
 .guide h3 {
   font-size:13px;
   font-weight:650;
@@ -370,9 +347,6 @@ textarea {
   justify-content:space-between;
   gap:15px;
   align-items:center}
-.result .eyebrow {
-  margin-bottom:9px;
-  color:var(--muted)}
 .result h2 {
   margin:0;
   font-size:22px;
@@ -521,10 +495,6 @@ details[open] summary span {
 .hero h1 {
   font-size:44px;
   letter-spacing:-2px}
-.hero .eyebrow {
-  font-size:8px;
-  letter-spacing:1.3px;
-  margin-bottom:17px}
 .intro {
   font-size:14px;
   line-height:1.7;
