@@ -104,10 +104,16 @@ def model_name(provider: str | None = None) -> str:
 
 
 def describe_reasoner() -> str:
-    """Human label for reports: the model in use, or the offline planner."""
+    """Human label for reports: the model in use, or the offline planner.
+
+    Decided by whether a model actually loads, not by which provider the env
+    names — a provider with no key or a missing package runs the planner, and
+    the planner's score must not be quoted under that model's name.
+    """
     provider = active_provider()
-    if provider in ("none", ""):
-        return "deterministic planner (no LLM configured)"
+    if get_chat_model() is None:
+        why = "no LLM configured" if provider in ("none", "") else f"{provider} unavailable"
+        return f"deterministic planner ({why})"
     return f"{provider}:{model_name(provider)}"
 
 
@@ -136,8 +142,8 @@ def get_chat_model():
             key = _gemini_key()
             if not key:
                 return None
-            os.environ.setdefault("GOOGLE_API_KEY", key)
-            return ChatGoogleGenerativeAI(model=model_name(provider), temperature=temperature)
+            return ChatGoogleGenerativeAI(model=model_name(provider), temperature=temperature,
+                                          google_api_key=key)
 
         if provider == "ollama":
             from langchain_ollama import ChatOllama

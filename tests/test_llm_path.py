@@ -197,6 +197,17 @@ def test_no_configuration_means_the_offline_planner(monkeypatch):
     assert "deterministic planner" in llm_module.describe_reasoner()
 
 
+def test_a_provider_that_cannot_load_gets_no_credit(monkeypatch):
+    """Eval reports quote describe_reasoner(), so it must name what actually
+    answered: a provider chosen with no key falls back to the planner, and the
+    planner's score must not be filed under the model's name."""
+    monkeypatch.setenv("NAVIGATOR_LLM_PROVIDER", "gemini")
+    for var in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    assert llm_module.get_chat_model() is None
+    assert llm_module.describe_reasoner() == "deterministic planner (gemini unavailable)"
+
+
 def test_a_key_selects_gemini(monkeypatch):
     monkeypatch.setenv("NAVIGATOR_LLM_PROVIDER", "auto")
     monkeypatch.setenv("GEMINI_API_KEY", "test-key-not-used")
