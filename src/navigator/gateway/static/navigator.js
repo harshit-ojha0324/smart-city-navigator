@@ -52,7 +52,6 @@
     $('result').dataset.state = 'loading';
     $('result').dataset.simulated = 'false';
     $('result').setAttribute('aria-busy', 'true');
-    $('result-label').textContent = mode === 'trip' ? 'YOUR JOURNEY' : mode === 'status' ? 'SERVICE CHECK' : 'YOUR ANSWER';
     $('result-title').textContent = 'Finding your way…';
     $('answer').textContent = '';
     $('error').hidden = true;
