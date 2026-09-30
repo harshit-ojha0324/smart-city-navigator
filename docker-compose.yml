@@ -5,22 +5,17 @@ services:
     build: .
     command: python -m navigator.mcp_servers.alerts_server
     environment:
-      NAVIGATOR_MCP_HOST: 0.0.0.0
       NAVIGATOR_SIMULATE_FEED: ${NAVIGATOR_SIMULATE_FEED:-0}
     expose: ["8071"]
 
   routing:
     build: .
     command: python -m navigator.mcp_servers.routing_server
-    environment:
-      NAVIGATOR_MCP_HOST: 0.0.0.0
     expose: ["8072"]
 
   geocode:
     build: .
     command: python -m navigator.mcp_servers.geocode_server
-    environment:
-      NAVIGATOR_MCP_HOST: 0.0.0.0
     expose: ["8073"]
 
   gateway:

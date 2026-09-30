@@ -2,9 +2,9 @@
 Shared node helpers and the `understand` entry node.
 
 The plan/tools/finish loop now lives per specialist agent in workers.py; the
-supervisor topology lives in graph.py. This module holds what both reuse: the
-stream-writer emit helper, message parsing, the query-understanding node, and
-the deterministic answer composer.
+supervisor topology lives in graph.py. This module holds what both reuse:
+message parsing, the query-understanding node, and the deterministic answer
+composer.
 """
 from __future__ import annotations
 

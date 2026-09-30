@@ -12,8 +12,7 @@ The remaining kinds (clarification, graceful failure, out-of-scope) are
 behavioral: what matters is that the agent asked or declined instead of
 inventing an itinerary, so those assert on shape plus the absence of a route.
 
-Deterministic and offline, so pass/fail is reproducible in CI. The same logic
-is exposed as a LangSmith evaluator for the tracing path.
+Deterministic and offline, so pass/fail is reproducible in CI.
 """
 from __future__ import annotations
 
