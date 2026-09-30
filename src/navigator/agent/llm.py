@@ -20,17 +20,16 @@ is active, so an eval score can never be ambiguous about what produced it.
 """
 from __future__ import annotations
 
+import itertools
 import os
 import re
+
+from navigator.core.mta_feed import SUBWAY_LINE_IDS as _LINE_IDS
 
 _DEFAULT_MODELS = {
     "gemini": "gemini-2.5-flash",
     "ollama": "qwen3:8b",
 }
-
-# Subway line tokens, longest first so "SIR" would beat "S" if added later.
-_LINE_IDS = ["1", "2", "3", "4", "5", "6", "7", "A", "C", "E", "B", "D",
-             "F", "M", "G", "J", "Z", "L", "N", "Q", "R", "W", "S"]
 
 # Order matters — most specific phrasings first.
 _ROUTE_PATTERNS = [
@@ -158,151 +157,154 @@ def get_chat_model():
 
 
 # ── Deterministic planner ──────────────────────────────────────────────
-class DeterministicPlanner:
-    """Regex-based intent + entity extraction used when no LLM key is present."""
+# Regex-based intent + entity extraction, used when no LLM is configured.
+def classify(question: str) -> str:
+    q = question.strip()
+    # "nearest station to X" is a lookup, not a trip — check before route
+    # extraction, whose bare "... to ..." pattern would otherwise grab it.
+    if _NEAR_WORDS.search(q):
+        return "info"
+    if _ACCESS_WORDS.search(q):
+        return "status"  # elevator/escalator outages are the Service Advisor's
+    if _extract_od(q) or _DEST_ONLY.search(q):
+        return "route"
+    if _STATUS_WORDS.search(q):
+        return "status"
+    if _INFO_WORDS.search(q):
+        return "info"
+    if _extract_line(q):
+        return "status"  # "what's the deal with the 7 today" names a line
+    if _TRANSIT_WORDS.search(q):
+        return "status"  # generic transit → show overall status
+    return "other"
 
-    def classify(self, question: str) -> str:
-        q = question.strip()
-        # "nearest station to X" is a lookup, not a trip — check before route
-        # extraction, whose bare "... to ..." pattern would otherwise grab it.
-        if _NEAR_WORDS.search(q):
-            return "info"
-        if _ACCESS_WORDS.search(q):
-            return "status"  # elevator/escalator outages are the Service Advisor's
-        if self._extract_od(q) or _DEST_ONLY.search(q):
-            return "route"
-        if _STATUS_WORDS.search(q):
-            return "status"
-        if _INFO_WORDS.search(q):
-            return "info"
-        if self._extract_line(q):
-            return "status"  # "what's the deal with the 7 today" names a line
-        if _TRANSIT_WORDS.search(q):
-            return "status"  # generic transit → show overall status
-        return "other"
 
-    def _extract_od(self, question: str) -> tuple[str, str] | None:
-        for _label, pat in _ROUTE_PATTERNS:
-            m = pat.search(question)
-            if m:
-                o = _clean_place(m.group("o"))
-                d = _clean_place(m.group("d"))
-                # Allow equal endpoints — plan_route answers "already there"
-                # rather than letting a greedy fallback grab "from <origin>".
-                if o and d and o.lower() not in _NOT_A_PLACE and d.lower() not in _NOT_A_PLACE:
-                    return o, d
-        return None
-
-    def _extract_line(self, question: str) -> str | None:
-        """Extract a valid line only when unambiguous.
-
-        Requires a "<line> train/line" adjacency for letters (so the "s" in
-        "What's" is never read as the S train); a bare digit 1-7 is safe alone.
-        """
-        m = re.search(r"\b([1-7A-Za-z])\s+(?:train|line)\b", question, re.I)
-        if m and m.group(1).upper() in _LINE_IDS:
-            return m.group(1).upper()
-        m = re.search(r"\b(?:train|line)\s+([1-7A-Za-z])\b", question, re.I)
-        if m and m.group(1).upper() in _LINE_IDS:
-            return m.group(1).upper()
-        m = re.search(r"\b([1-7])\b", question)  # standalone digit line
+def _extract_od(question: str) -> tuple[str, str] | None:
+    for _label, pat in _ROUTE_PATTERNS:
+        m = pat.search(question)
         if m:
-            return m.group(1)
-        # "Is the Q running?" / "delays on the F" — a capital letter right after
-        # "the/on" (case-sensitive, so "the a..." in prose never matches).
-        m = re.search(r"\b(?:the|on)\s+([A-Z])\b(?!['’])", question)
-        if m and m.group(1) in _LINE_IDS:
-            return m.group(1)
-        return None
+            o = _clean_place(m.group("o"))
+            d = _clean_place(m.group("d"))
+            # Allow equal endpoints — plan_route answers "already there"
+            # rather than letting a greedy fallback grab "from <origin>".
+            if o and d and o.lower() not in _NOT_A_PLACE and d.lower() not in _NOT_A_PLACE:
+                return o, d
+    return None
 
-    def _extract_line_token(self, question: str) -> str | None:
-        """Any 1-3 char token named as a train/line, valid or not.
 
-        Lets "Is the QZ train running?" call the tool with "QZ" so it returns a
-        clean "unknown line" error instead of silently showing overall status.
-        """
-        m = re.search(r"\b([A-Za-z0-9]{1,3})\s+(?:train|line)\b", question, re.I)
+def _extract_line(question: str) -> str | None:
+    """Extract a valid line only when unambiguous.
+
+    Requires a "<line> train/line" adjacency for letters (so the "s" in
+    "What's" is never read as the S train); a bare digit 1-7 is safe alone.
+    """
+    m = re.search(r"\b([1-7A-Za-z])\s+(?:train|line)\b", question, re.I)
+    if m and m.group(1).upper() in _LINE_IDS:
+        return m.group(1).upper()
+    m = re.search(r"\b(?:train|line)\s+([1-7A-Za-z])\b", question, re.I)
+    if m and m.group(1).upper() in _LINE_IDS:
+        return m.group(1).upper()
+    m = re.search(r"\b([1-7])\b", question)  # standalone digit line
+    if m:
+        return m.group(1)
+    # "Is the Q running?" / "delays on the F" — a capital letter right after
+    # "the/on" (case-sensitive, so "the a..." in prose never matches).
+    m = re.search(r"\b(?:the|on)\s+([A-Z])\b(?!['’])", question)
+    if m and m.group(1) in _LINE_IDS:
+        return m.group(1)
+    return None
+
+
+def _extract_line_token(question: str) -> str | None:
+    """Any 1-3 char token named as a train/line, valid or not.
+
+    Lets "Is the QZ train running?" call the tool with "QZ" so it returns a
+    clean "unknown line" error instead of silently showing overall status.
+    """
+    m = re.search(r"\b([A-Za-z0-9]{1,3})\s+(?:train|line)\b", question, re.I)
+    if m:
+        return m.group(1).upper()
+    m = re.search(r"\b(?:train|line)\s+([A-Za-z0-9]{1,3})\b", question, re.I)
+    if m:
+        return m.group(1).upper()
+    return None
+
+
+def place_in(question: str) -> str:
+    """The station or place a lookup question is about.
+
+    Tried most specific first: an explicit "stops at X" phrasing, then a
+    trailing "at X", then whatever is left after stripping the question
+    stem — "what lines are at 86 St" must ask about "86 St", not about the
+    whole sentence.
+    """
+    for pattern in (
+        r"(?:stops? at|stop at|serves?|catch at|catch)\s+(?P<p>.+?)(?:[.?!]|$)",
+        r"\b(?:at|in|for|to)\s+(?P<p>.+?)(?:[.?!]|$)",
+    ):
+        m = re.search(pattern, question, re.I)
         if m:
-            return m.group(1).upper()
-        m = re.search(r"\b(?:train|line)\s+([A-Za-z0-9]{1,3})\b", question, re.I)
-        if m:
-            return m.group(1).upper()
+            place = _clean_place(m.group("p"))
+            if place:
+                return place
+    return _clean_place(_INFO_LEADIN.sub("", question))
+
+
+def destination_only(question: str) -> str | None:
+    """The destination of a trip request that names no origin."""
+    if _extract_od(question):
         return None
-
-    def place_in(self, question: str) -> str:
-        """The station or place a lookup question is about.
-
-        Tried most specific first: an explicit "stops at X" phrasing, then a
-        trailing "at X", then whatever is left after stripping the question
-        stem — "what lines are at 86 St" must ask about "86 St", not about the
-        whole sentence.
-        """
-        for pattern in (
-            r"(?:stops? at|stop at|serves?|catch at|catch)\s+(?P<p>.+?)(?:[.?!]|$)",
-            r"\b(?:at|in|for|to)\s+(?P<p>.+?)(?:[.?!]|$)",
-        ):
-            m = re.search(pattern, question, re.I)
-            if m:
-                place = _clean_place(m.group("p"))
-                if place:
-                    return place
-        return _clean_place(_INFO_LEADIN.sub("", question))
-
-    def destination_only(self, question: str) -> str | None:
-        """The destination of a trip request that names no origin."""
-        if self._extract_od(question):
-            return None
-        m = _DEST_ONLY.search(question)
-        if not m:
-            return None
-        return _clean_place(m.group("d") or m.group("d2") or "")
-
-    def initial_tool_calls(self, question: str, intent: str,
-                           context_lines: list[str] | None = None) -> list[dict]:
-        """Tool calls to make on the first plan pass (empty → straight to synth).
-
-        `context_lines` is handed over by the supervisor when another agent has
-        already planned a route: the Service Advisor then checks exactly the
-        lines the rider will use instead of dumping the whole system status.
-        """
-        if intent == "route":
-            od = self._extract_od(question)
-            if od:
-                return [_call("plan_trip", {"origin": od[0], "destination": od[1]})]
-            return []
-        if intent == "status" and context_lines:
-            return [_call("get_line_status", {"line": ln}) for ln in context_lines]
-        if intent == "status" and _ACCESS_WORDS.search(question):
-            m = re.search(r"\b(?:at|in|for|near)\s+(?P<p>.+?)(?:[.?!]|$)", question, re.I)
-            station = _clean_place(m.group("p")) if m else ""
-            return [_call("list_elevator_outages", {"station_contains": station})]
-        if intent == "status":
-            line = self._extract_line(question)
-            if line:
-                return [_call("get_line_status", {"line": line})]
-            token = self._extract_line_token(question)  # e.g. "QZ" — invalid line
-            if token:
-                return [_call("get_line_status", {"line": token})]
-            return [_call("get_service_status", {})]
-        if intent == "info":
-            # "nearest/closest ... to X" → geocode X to its nearest station.
-            if _NEAR_WORDS.search(question):
-                m = re.search(r"(?:nearest|closest)\s+(?:station\s+)?(?:to\s+)?(?P<p>.+?)(?:[.?!]|$)",
-                              question, re.I)
-                place = _clean_place(m.group("p")) if m else question
-                return [_call("geocode_place", {"query": place})]
-            # "which lines stop at X" / "what trains can I catch at X" →
-            # resolve the station itself.
-            return [_call("resolve_station", {"query": self.place_in(question)})]
-        return []  # 'other' → no tools, synth issues a polite redirect
+    m = _DEST_ONLY.search(question)
+    if not m:
+        return None
+    return _clean_place(m.group("d") or m.group("d2") or "")
 
 
-_CALL_SEQ = {"n": 0}
+def initial_tool_calls(question: str, intent: str,
+                       context_lines: list[str] | None = None) -> list[dict]:
+    """Tool calls to make on the first plan pass (empty → straight to synth).
+
+    `context_lines` is handed over by the supervisor when another agent has
+    already planned a route: the Service Advisor then checks exactly the
+    lines the rider will use instead of dumping the whole system status.
+    """
+    if intent == "route":
+        od = _extract_od(question)
+        if od:
+            return [_call("plan_trip", {"origin": od[0], "destination": od[1]})]
+        return []
+    if intent == "status" and context_lines:
+        return [_call("get_line_status", {"line": ln}) for ln in context_lines]
+    if intent == "status" and _ACCESS_WORDS.search(question):
+        m = re.search(r"\b(?:at|in|for|near)\s+(?P<p>.+?)(?:[.?!]|$)", question, re.I)
+        station = _clean_place(m.group("p")) if m else ""
+        return [_call("list_elevator_outages", {"station_contains": station})]
+    if intent == "status":
+        line = _extract_line(question)
+        if line:
+            return [_call("get_line_status", {"line": line})]
+        token = _extract_line_token(question)  # e.g. "QZ" — invalid line
+        if token:
+            return [_call("get_line_status", {"line": token})]
+        return [_call("get_service_status", {})]
+    if intent == "info":
+        # "nearest/closest ... to X" → geocode X to its nearest station.
+        if _NEAR_WORDS.search(question):
+            m = re.search(r"(?:nearest|closest)\s+(?:station\s+)?(?:to\s+)?(?P<p>.+?)(?:[.?!]|$)",
+                          question, re.I)
+            place = _clean_place(m.group("p")) if m else question
+            return [_call("geocode_place", {"query": place})]
+        # "which lines stop at X" / "what trains can I catch at X" →
+        # resolve the station itself.
+        return [_call("resolve_station", {"query": place_in(question)})]
+    return []  # 'other' → no tools, synth issues a polite redirect
+
+
+_CALL_IDS = itertools.count(1)
 
 
 def _call(name: str, args: dict) -> dict:
-    _CALL_SEQ["n"] += 1
-    return {"name": name, "args": args, "id": f"det-{name}-{_CALL_SEQ['n']}", "type": "tool_call"}
+    return {"name": name, "args": args, "id": f"det-{name}-{next(_CALL_IDS)}", "type": "tool_call"}
 
 
 def _clean_place(text: str) -> str:
