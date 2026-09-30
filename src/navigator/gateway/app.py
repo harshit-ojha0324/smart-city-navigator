@@ -21,7 +21,6 @@ import threading
 import uuid
 
 from flask import Flask, Response, jsonify, request
-from flask_cors import CORS
 
 from navigator.agent.graph import run_once, stream_once
 
@@ -52,7 +51,6 @@ def _thread_id(raw) -> str:
 
 def create_app() -> Flask:
     app = Flask(__name__)
-    CORS(app)
 
     @app.get("/health")
     def health():

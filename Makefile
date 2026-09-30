@@ -29,9 +29,10 @@ install: $(VENV)
 	$(BIN)/pip install -q --require-hashes -r requirements.lock
 
 # Resolve requirements*.txt into the hash-pinned lockfile CI and Docker install.
-# Run after changing a version bound; commit the result.
+# Run after changing a version bound; commit the result. 3.10 is CI's oldest
+# Python — without it uv resolves for the running interpreter and drops 3.10 pins.
 lock:
-	uv pip compile requirements-dev.txt --universal --generate-hashes -o requirements.lock
+	uv pip compile requirements-dev.txt --universal --python-version 3.10 --generate-hashes -o requirements.lock
 
 test:
 	$(BIN)/pytest -q
