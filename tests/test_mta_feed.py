@@ -23,7 +23,7 @@ def test_get_line_status_valid_and_invalid():
 
 
 def test_status_summary_is_text():
-    s = mta_feed.status_summary()
+    s = mta_feed.status_summary(mta_feed.fetch_alerts())
     assert isinstance(s, str) and len(s) > 0
 
 
