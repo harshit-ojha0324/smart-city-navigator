@@ -93,7 +93,8 @@ def _tokens(text: str) -> list[str]:
     return out
 
 
-def _normalize(text: str) -> str:
+def normalize(text: str) -> str:
+    """The canonical form used for all fuzzy place matching."""
     return " ".join(_tokens(text))
 
 
@@ -103,11 +104,6 @@ _ACRONYMS = {"jfk"}
 def display_name(name: str) -> str:
     """Title-case a landmark key for answers ("jfk airport" → "JFK Airport")."""
     return " ".join(w.upper() if w in _ACRONYMS else w.capitalize() for w in name.split())
-
-
-def normalize(text: str) -> str:
-    """Public alias: the canonical form used for all fuzzy place matching."""
-    return _normalize(text)
 
 
 def nearest_station(lat: float, lng: float) -> dict:
@@ -191,24 +187,14 @@ def complex_lines(station_id: str) -> list[str]:
 
     A rider asking what stops at Union Sq means all of 4/5/6/L/N/Q/R/W, not one
     platform's lines — but not the unconnected 86 St across town either."""
-    members = connected_members(station_id)
-    lines: list[str] = []
-    for sid in members:
-        for line in STATION_BY_ID[sid]["lines"]:
-            if line not in lines:
-                lines.append(line)
+    lines = {line for sid in connected_members(station_id) for line in STATION_BY_ID[sid]["lines"]}
     return sorted(lines, key=lambda line: (len(line), line))
 
 
 def rider_lines(lines) -> list[str]:
     """Lines as a rider names them: the schedule's express variants (6X, FX) and
     the three shuttles collapse onto the 6, the F and the S."""
-    out: list[str] = []
-    for line in lines or []:
-        name = feed_line(line)
-        if name not in out:
-            out.append(name)
-    return out
+    return list(dict.fromkeys(feed_line(line) for line in lines or []))
 
 
 def _candidate(station_id: str) -> dict:
@@ -278,23 +264,14 @@ def geocode_place(query: str) -> dict:
 
     Tries the landmark table first, then falls back to station-name resolution.
     """
-    q = _normalize(query)
-    # Landmark match (exact-normalized, then fuzzy over landmark keys)
-    for name, (lat, lng) in LANDMARKS.items():
-        if _normalize(name) == q:
-            near = nearest_station(lat, lng)
-            return {"query": query, "lat": lat, "lng": lng, "source": "landmark",
-                    "matched": name, "nearest_station": near}
-
-    landmark_keys = list(LANDMARKS)
-    match = difflib.get_close_matches(q, [_normalize(k) for k in landmark_keys], n=1, cutoff=0.7)
+    # Landmark match; an exact normalized match scores 1.0, so it always ranks first.
+    by_norm = {normalize(k): k for k in LANDMARKS}
+    match = difflib.get_close_matches(normalize(query), by_norm, n=1, cutoff=0.7)
     if match:
-        idx = [_normalize(k) for k in landmark_keys].index(match[0])
-        name = landmark_keys[idx]
+        name = by_norm[match[0]]
         lat, lng = LANDMARKS[name]
-        near = nearest_station(lat, lng)
         return {"query": query, "lat": lat, "lng": lng, "source": "landmark",
-                "matched": name, "nearest_station": near}
+                "matched": name, "nearest_station": nearest_station(lat, lng)}
 
     # Fall back to a station name
     resolved = resolve_station(query)
