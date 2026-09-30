@@ -99,7 +99,9 @@ def create_app() -> Flask:
                         ):
                             q.put(ev)
                     except Exception as exc:  # surface, don't hang the stream
-                        q.put({"node": "error", "text": str(exc)})
+                        # Same contract as /api/ask: the type, never the message.
+                        app.logger.exception("agent stream failed")
+                        q.put({"node": "error", "text": f"agent unavailable ({type(exc).__name__})"})
                     finally:
                         q.put(sentinel)
 

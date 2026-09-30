@@ -255,6 +255,21 @@ def test_gateway_gives_each_request_its_own_thread():
     assert a["thread_id"] != b["thread_id"]
 
 
+def test_stream_errors_do_not_leak_exception_text(monkeypatch):
+    """/api/ask answers a failure with the exception type only; the SSE stream
+    used to send str(exc) — internal paths and hosts — to the browser."""
+    import navigator.gateway.app as gateway
+
+    async def failing_stream(*_args, **_kwargs):
+        raise RuntimeError("sqlite at /srv/private/checkpoints.db is locked")
+        yield  # unreachable: makes this an async generator, like stream_once
+
+    monkeypatch.setattr(gateway, "stream_once", failing_stream)
+    body = create_app().test_client().get("/api/stream?q=hi").get_data(as_text=True)
+    assert "RuntimeError" in body
+    assert "/srv/private" not in body
+
+
 def test_gateway_rejects_oversized_questions():
     c = create_app().test_client()
     assert c.post("/api/ask", json={"question": "x" * 501}).status_code == 413
