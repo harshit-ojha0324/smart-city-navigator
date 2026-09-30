@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boot the 3 FastMCP servers, then the Flask gateway wired to them over
+# Boot the 3 MCP servers, then the Flask gateway wired to them over
 # streamable HTTP. Ctrl-C tears the whole thing down.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -20,10 +20,12 @@ for s in alerts routing geocode; do
   echo "started MCP server: $s (pid $!)"
 done
 
-# Wait for all three ports before starting the gateway.
+# Wait for all three ports before starting the gateway — the ports the servers
+# actually bound, so NAVIGATOR_*_PORT overrides are honoured here too.
 $PY - <<'PY'
 import socket, time
-for name, p in {"alerts":8071,"routing":8072,"geocode":8073}.items():
+from navigator.mcp_servers import PORTS
+for name, p in PORTS.items():
     end = time.time() + 20
     while time.time() < end:
         try:
