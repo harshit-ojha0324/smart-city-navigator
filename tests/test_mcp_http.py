@@ -62,11 +62,11 @@ def live_mcp_servers():
         for port, proc in zip(ports.values(), procs, strict=True):
             _wait_for(port, proc)
         servers.PORTS.update(ports)  # point the client at this test's servers
-        agent_tools._MCP_TOOL_CACHE.clear()
+        agent_tools._mcp_tools = None
         yield ports
     finally:
         servers.PORTS.update(saved)
-        agent_tools._MCP_TOOL_CACHE.clear()
+        agent_tools._mcp_tools = None
         for proc in procs:
             proc.terminate()
         for proc in procs:
@@ -75,7 +75,7 @@ def live_mcp_servers():
 
 
 def test_tools_load_over_streamable_http(live_mcp_servers):
-    tools = asyncio.run(agent_tools.load_mcp_tools("127.0.0.1"))
+    tools = asyncio.run(agent_tools.load_mcp_tools())
     assert {t.name for t in tools} == {t.name for t in agent_tools.inprocess_tools()}
 
 
@@ -86,5 +86,5 @@ def test_tools_load_over_streamable_http(live_mcp_servers):
     ("How do I get from Bedford Av to Herald Sq and are there delays?", "Service on your route"),
 ])
 def test_agent_answers_through_live_mcp_servers(live_mcp_servers, question, expect):
-    st = asyncio.run(run_once(question, transport="mcp", host="127.0.0.1"))
+    st = asyncio.run(run_once(question, transport="mcp"))
     assert expect in st["answer"]

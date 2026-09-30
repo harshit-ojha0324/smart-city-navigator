@@ -7,8 +7,8 @@ import tempfile
 import pytest
 from conftest import station_id
 
+from navigator.agent import llm as planner
 from navigator.agent.graph import run_once
-from navigator.agent.llm import DeterministicPlanner
 from navigator.agent.nodes import message_text
 from navigator.agent.tools import inprocess_tools
 from navigator.core import geocode, mta_feed, routing
@@ -92,12 +92,12 @@ def test_reused_thread_does_not_replay_previous_answer():
     ("Are there delays on the 7?", "7"),
 ])
 def test_bare_line_letters_are_recognised(q, line):
-    assert DeterministicPlanner()._extract_line(q) == line
+    assert planner._extract_line(q) == line
     assert _run(q)["answer"].startswith(f"The {line} train")
 
 
 def test_prose_never_reads_as_a_line():
-    assert DeterministicPlanner()._extract_line("What is the status right now?") is None
+    assert planner._extract_line("What is the status right now?") is None
 
 
 def test_destination_only_asks_for_origin():
@@ -120,7 +120,7 @@ def test_origin_stated_up_front():
     ("what stops at Broadway Junction", "info"),         # wild
 ])
 def test_phrasings_found_by_held_out_sets_are_classified(question, expected):
-    assert DeterministicPlanner().classify(question) == expected
+    assert planner.classify(question) == expected
 
 
 @pytest.mark.parametrize("question,origin,destination", [
@@ -131,12 +131,11 @@ def test_phrasings_found_by_held_out_sets_are_classified(question, expected):
     ("from Bedford Av to Herald Sq", "Bedford Av", "Herald Sq"),  # "be" must not eat "Bedford"
 ])
 def test_trip_endpoints_survive_the_sentence_around_them(question, origin, destination):
-    assert DeterministicPlanner()._extract_od(question) == (origin, destination)
+    assert planner._extract_od(question) == (origin, destination)
 
 
 def test_a_pronoun_is_never_treated_as_a_station():
     """"get me to Wall St" used to plan a trip starting from "me"."""
-    planner = DeterministicPlanner()
     assert planner._extract_od("get me to Wall St") is None
     assert planner.destination_only("get me to Wall St") == "Wall St"
     assert "where are you starting" in _run("get me to Wall St")["answer"].lower()
