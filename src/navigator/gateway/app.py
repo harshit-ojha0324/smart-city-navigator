@@ -2,7 +2,7 @@
 Flask API gateway with Server-Sent Events streaming.
 
 Endpoints
-  GET  /                 tiny demo page that streams the agent's reasoning live
+  GET  /                 responsive trip planner with streamed results
   GET  /health           liveness + which tool transport is active
   POST /api/ask          {question, thread_id?} -> {answer, intent, steps}
   GET  /api/stream?q=..  text/event-stream of reasoning steps, then the answer
@@ -20,9 +20,10 @@ import queue
 import threading
 import uuid
 
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, jsonify, render_template, request
 
 from navigator.agent.graph import run_once, stream_once
+from navigator.core.mta_feed import SUBWAY_LINE_IDS
 
 TRANSPORT = os.environ.get("NAVIGATOR_TRANSPORT", "inprocess")
 CHECKPOINT_PATH = os.environ.get("NAVIGATOR_CHECKPOINT", ":memory:")
@@ -119,42 +120,9 @@ def create_app() -> Flask:
 
     @app.get("/")
     def index():
-        return Response(_DEMO_HTML, mimetype="text/html")
+        return render_template("index.html", lines=SUBWAY_LINE_IDS)
 
     return app
-
-
-_DEMO_HTML = """<!doctype html><html><head><meta charset=utf-8>
-<title>Smart City Navigator</title><meta name=viewport content="width=device-width,initial-scale=1">
-<style>
- body{font-family:-apple-system,system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;color:#111;background:#fafafa}
- h1{font-size:1.4rem}.sub{color:#666;margin-top:-.6rem}
- form{display:flex;gap:.5rem;margin:1rem 0}
- input{flex:1;padding:.6rem;border:1px solid #ccc;border-radius:8px;font-size:1rem}
- button{padding:.6rem 1rem;border:0;border-radius:8px;background:#0039A6;color:#fff;font-size:1rem;cursor:pointer}
- .steps{font-family:ui-monospace,monospace;font-size:.85rem;color:#555;background:#fff;border:1px solid #eee;border-radius:8px;padding:.6rem;min-height:2rem;white-space:pre-wrap}
- .answer{margin-top:1rem;padding:1rem;background:#EAF0FF;border-radius:8px;font-size:1.05rem;white-space:pre-wrap}
- .node{color:#0039A6;font-weight:600}
-</style></head><body>
-<h1>🚇 Smart City Navigator</h1>
-<p class=sub>Multi-agent NYC transit planner — watch the supervisor delegate to specialist agents live.</p>
-<form id=f><input id=q placeholder="How do I get from Times Square to Coney Island?" autofocus>
-<button>Ask</button></form>
-<div class=steps id=steps>Ask a question to see the agent's reasoning…</div>
-<div class=answer id=answer hidden></div>
-<script>
-const f=document.getElementById('f'),q=document.getElementById('q'),
- steps=document.getElementById('steps'),answer=document.getElementById('answer');
-f.onsubmit=e=>{e.preventDefault();if(!q.value.trim())return;
- steps.textContent='';answer.hidden=true;answer.textContent='';
- const es=new EventSource('/api/stream?q='+encodeURIComponent(q.value));
- es.onmessage=ev=>{const d=JSON.parse(ev.data);
-  if(d.node==='done'){answer.hidden=false;answer.textContent=d.answer;es.close();return;}
-  // textContent only: step text echoes user input and tool output (no HTML injection)
-  const node=document.createElement('span');node.className='node';node.textContent=`[${d.node}] `;
-  steps.append(node,(d.text||'')+'\\n');};
- es.onerror=()=>es.close();};
-</script></body></html>"""
 
 
 app = create_app()
