@@ -38,3 +38,15 @@ def test_stream_emits_reasoning_and_done():
 def test_index_serves_demo_page():
     r = _client().get("/")
     assert r.status_code == 200 and b"Smart City Navigator" in r.data
+
+
+def test_planner_template_and_assets_are_served():
+    client = _client()
+    page = client.get("/").get_data(as_text=True)
+    assert '/static/navigator.css' in page and '/static/navigator.js' in page
+    assert 'value="L"' in page and '{{' not in page
+    for path, content_type in [("/static/navigator.css", "text/css"),
+                               ("/static/navigator.js", "javascript")]:
+        response = client.get(path)
+        assert response.status_code == 200
+        assert content_type in response.content_type

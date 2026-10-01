@@ -271,7 +271,9 @@ def test_gateway_rejects_oversized_questions():
 
 def test_demo_page_never_injects_step_text_as_html():
     body = create_app().test_client().get("/").get_data(as_text=True)
-    assert "innerHTML" not in body
+    script = create_app().test_client().get("/static/navigator.js").get_data(as_text=True)
+    assert "innerHTML" not in body + script
+    assert "textContent = data.answer" in script
 
 
 @pytest.mark.parametrize("kind,severity,label", [

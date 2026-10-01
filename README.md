@@ -151,6 +151,25 @@ Answer: Take the L from Bedford Av to 14 St (4 stops); transfer to the F from 14
 That is the real trip: the L to 14 St, across the platform, then the F. The walk
 inside the complex is folded into the transfer rather than announced as a leg.
 
+## Web interface
+
+The gateway serves a responsive planner at `/`, with three views: **Plan a trip**,
+**Service status**, and **Ask a question**. The trip form has separate origin and
+destination fields, a swap control, suggested trips, and optional route service
+updates. Results stream into a dedicated panel; the agent trace is available under
+**How we found this**. Connection errors offer a retry, requests have a 90-second
+UI timeout, and switching views dismisses the old stream so its result cannot
+overwrite a new lookup. Dismissing a stream does not cancel backend processing.
+
+The layout includes keyboard focus styles, labelled inputs, screen-reader status
+announcements, and reduced-motion support. Tool output is rendered as plain text,
+including simulation and unavailable-data disclosures. The interface uses local
+CSS and JavaScript with no external font or frontend framework dependency.
+
+UI files live in `src/navigator/gateway/templates/index.html` and
+`src/navigator/gateway/static/`; the Flask gateway renders the template and serves
+the assets. The existing Dockerfile copies them with `src/`.
+
 ## The network
 
 `src/navigator/core/data/subway_graph.json` is generated from the MTA's published
