@@ -64,7 +64,6 @@ def plan_trip(origin: str | int, destination: str | int) -> dict:
         route = routing.plan_route(o["id"], d["id"])
     except routing.RouteError as exc:
         return {"error": str(exc), "found": False}
-    route = dict(route)  # plan_route is lru_cached — never mutate the shared dict
     route["origin_station"] = o["name"]
     route["destination_station"] = d["name"]
     notes = " ".join(n for n in (_via_note("From", o), _via_note("To", d)) if n)

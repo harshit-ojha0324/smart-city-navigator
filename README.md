@@ -108,12 +108,12 @@ Each wraps one slice of the transit core and is independently runnable
 
 ```bash
 make install          # venv + deps from requirements.lock (hash-pinned)
-make test             # 110 tests, incl. the 3 MCP servers booted over HTTP
+make test             # 109 tests, incl. the 3 MCP servers booted over HTTP
 make lint             # ruff
 make eval             # core 20-prompt suite
-make eval-all         # all four sets (70 prompts)
-make eval-heldout     # the 20 that first scored 15/20
-make eval-wild        # the newest set
+make eval ARGS="--set all"      # all four sets (70 prompts)
+make eval ARGS="--set heldout"  # the 20 that first scored 15/20
+make eval ARGS="--set wild"     # the newest set
 make graph            # rebuild the network from the MTA GTFS feed
 
 # Run the whole system (3 MCP servers + gateway), then open http://localhost:8000
@@ -302,7 +302,7 @@ src/navigator/
   core/data/     subway_graph.json — the network, generated from the MTA GTFS feed
 eval/            four prompt sets, ground-truth graders, runner
 scripts/         build_graph.py (GTFS → graph), run_all.sh (servers + gateway), demo.py (CLI)
-tests/           110 unit + integration tests (incl. live MCP-over-HTTP and the LLM path)
+tests/           109 unit + integration tests (incl. live MCP-over-HTTP and the LLM path)
 ```
 
 ## Design notes
@@ -373,7 +373,7 @@ Stated plainly, because a reviewer will find them anyway:
 
 - **Not cloud-deployed.** It runs locally (`make run`) or under `docker compose`.
 - **LangSmith tracing is wired but unrun.** Setting `LANGSMITH_API_KEY` turns on tracing
-  for every node and tool call, but no trace has been captured here, so there is no
+  for every node and tool call in eval runs, but no trace has been captured here, so there is no
   screenshot and no token-cost figure. Their hosted eval experiments are deliberately
   not wired: grading is local and against ground truth, and a second copy of that logic
   upstream would be one more thing to keep honest. Scores in this README come from

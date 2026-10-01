@@ -53,8 +53,6 @@ async def synthesize(state) -> dict:
     results = state.get("worker_results", [])
     if not results:
         answer = compose_answer(state.get("intent", "other"), [], state["question"])
-    elif len(results) == 1:
-        answer = results[0]["result"]
     else:
         answer = "\n\n".join(r["result"] for r in results if r.get("result"))
     return {"answer": answer,

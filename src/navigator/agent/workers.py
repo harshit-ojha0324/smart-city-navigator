@@ -135,7 +135,7 @@ def build_worker(spec: WorkerSpec, tools: list, llm):
             result = text
         else:
             result = compose_answer(spec.intent, results, state["task"])
-        return {"result": result, "data": data if isinstance(data, dict) else {}}
+        return {"result": result, "data": data}
 
     builder = StateGraph(WorkerState)
     builder.add_node("plan", plan)

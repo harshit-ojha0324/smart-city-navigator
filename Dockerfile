@@ -9,7 +9,6 @@ COPY requirements.lock .
 RUN pip install --no-cache-dir --require-hashes -r requirements.lock
 
 COPY src/ src/
-COPY eval/ eval/
 
 # Bind on all interfaces inside the container network.
 ENV NAVIGATOR_MCP_HOST=0.0.0.0

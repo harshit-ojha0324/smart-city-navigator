@@ -98,8 +98,7 @@ def active_provider() -> str:
     return "none"
 
 
-def model_name(provider: str | None = None) -> str:
-    provider = provider or active_provider()
+def model_name(provider: str) -> str:
     return os.environ.get("NAVIGATOR_MODEL") or _DEFAULT_MODELS.get(provider, "")
 
 
