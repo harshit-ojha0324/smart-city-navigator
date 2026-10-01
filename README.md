@@ -111,9 +111,9 @@ make install          # venv + deps from requirements.lock (hash-pinned)
 make test             # 109 tests, incl. the 3 MCP servers booted over HTTP
 make lint             # ruff
 make eval             # core 20-prompt suite
-make eval-all         # all four sets (70 prompts)
-make eval-heldout     # the 20 that first scored 15/20
-make eval-wild        # the newest set
+make eval ARGS="--set all"      # all four sets (70 prompts)
+make eval ARGS="--set heldout"  # the 20 that first scored 15/20
+make eval ARGS="--set wild"     # the newest set
 make graph            # rebuild the network from the MTA GTFS feed
 
 # Run the whole system (3 MCP servers + gateway), then open http://localhost:8000
