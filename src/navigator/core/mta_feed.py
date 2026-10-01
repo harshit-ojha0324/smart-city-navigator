@@ -32,6 +32,12 @@ SUBWAY_LINE_IDS = [
 
 # MTA Mercury alert_type → (severity 0-3, human label)
 ALERT_TYPE_MAP = {
+    "Delays": (1, "Delays"),
+    "Suspended": (3, "Suspended"),
+    "Part Suspended": (2, "Service Change"),
+    "Reroute": (2, "Service Change"),
+    "Stops Skipped": (2, "Service Change"),
+    "Express to Local": (2, "Service Change"),
     "Planned - Suspended": (3, "Suspended"),
     "No Scheduled Service": (3, "Suspended"),
     "Planned - Part Suspended": (2, "Service Change"),
@@ -156,11 +162,15 @@ def _parse_alerts_json(data: dict, now_ts: float | None = None) -> dict:
         if not _is_active(alert, now_ts):
             continue
         mercury = alert.get("transit_realtime.mercury_alert", {})
-        severity, label = ALERT_TYPE_MAP.get(mercury.get("alert_type", ""), (0, "Good Service"))
+        # An unfamiliar or missing type is still an active alert. Preserve its
+        # text without guessing that service is normal (or inventing a delay).
+        severity, label = ALERT_TYPE_MAP.get(mercury.get("alert_type", ""), (1, "Service Alert"))
         header = _get_translation(alert.get("header_text", {}))
         description = _get_translation(alert.get("description_text", {}))
         # Feed headers are multi-line ("No [A] between ...\n[A] will be rerouted...").
-        message = " ".join((header or description or STATUS_MESSAGES[severity]).split())
+        fallback = ("An active service alert is in effect. Check MTA.info for details."
+                    if label == "Service Alert" else STATUS_MESSAGES[severity])
+        message = " ".join((header or description or fallback).split())
         for informed in alert.get("informed_entity", []):
             route_id = informed.get("route_id", "")
             if route_id not in result:
