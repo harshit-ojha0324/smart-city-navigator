@@ -360,6 +360,12 @@ tests/           109 unit + integration tests (incl. live MCP-over-HTTP and the 
   simulated, a landmark snapped to a station says so (and one too far from any
   station — LaGuardia, 3 km from the nearest stop — is refused rather than routed),
   and "no elevator outages" is never claimed when the outage feed couldn't be read.
+- **Live delays remain visible.** The alert parser recognizes `Delays` and
+  unplanned suspension, reroute, and stop-change types. Unknown or missing types
+  become a severity-1 `Service Alert`, preserving the feed's text instead of
+  silently reporting `Good Service`. With no text, the fallback reports an active
+  alert without inventing a delay. Active-period filtering and higher-severity
+  alerts still take precedence (`tests/test_regressions.py`).
 - **Model prose cannot override tool results.** Worker answers use the shared
   deterministic composer even when an LLM chooses the tools. Route errors,
   disambiguation requests, unavailable data, and simulation labels are preserved.

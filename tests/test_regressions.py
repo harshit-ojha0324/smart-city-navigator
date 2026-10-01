@@ -272,3 +272,40 @@ def test_gateway_rejects_oversized_questions():
 def test_demo_page_never_injects_step_text_as_html():
     body = create_app().test_client().get("/").get_data(as_text=True)
     assert "innerHTML" not in body
+
+
+@pytest.mark.parametrize("kind,severity,label", [
+    ("Delays", 1, "Delays"),
+    ("Suspended", 3, "Suspended"),
+    ("Reroute", 2, "Service Change"),
+    ("New alert type", 1, "Service Alert"),
+    ("", 1, "Service Alert"),
+])
+def test_active_alert_types_do_not_silently_become_good_service(kind, severity, label):
+    status = mta_feed._parse_alerts_json({"entity": [_alert("Q", kind, [])]})
+    assert status["Q"]["severity"] == severity
+    assert status["Q"]["status"] == label
+    assert status["Q"]["message"] == f"Q {kind}".strip()
+    assert status["Q"]["source"] == "live"
+    assert status["L"]["status"] == "Good Service"
+
+
+def test_unknown_alert_without_text_does_not_invent_a_delay():
+    alert = _alert("Q", "New alert type", [])
+    del alert["alert"]["header_text"]
+    status = mta_feed._parse_alerts_json({"entity": [alert]})["Q"]
+    assert status["status"] == "Service Alert"
+    assert "active service alert" in status["message"]
+    assert "delay" not in status["message"].lower()
+
+
+def test_unknown_alert_does_not_override_suspension_or_activate_early():
+    now = 1_800_000_000
+    feed = {"entity": [
+        _alert("Q", "Suspended", []),
+        _alert("Q", "New alert type", []),
+        _alert("L", "New alert type", [{"start": now + 60}]),
+    ]}
+    status = mta_feed._parse_alerts_json(feed, now_ts=now)
+    assert status["Q"]["status"] == "Suspended"
+    assert status["L"]["status"] == "Good Service"
