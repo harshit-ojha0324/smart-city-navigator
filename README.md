@@ -111,7 +111,7 @@ Each wraps one slice of the transit core and is independently runnable
 
 ```bash
 make install          # venv + deps from requirements.lock (hash-pinned)
-make test             # 125 tests, incl. the 3 MCP servers booted over HTTP
+make test             # 129 tests, incl. the 3 MCP servers booted over HTTP
 make lint             # ruff
 make eval             # core 20-prompt suite
 make eval ARGS="--set all"      # all four sets (70 prompts)
@@ -299,7 +299,7 @@ fluent wrong one; this can.
 
 ### Latest validation after the audit fixes
 
-- **125 tests passed**, including the three MCP servers over local HTTP.
+- **129 tests passed**, including the three MCP servers over local HTTP.
 - **70/70 evaluation cases passed** with the deterministic planner, in-process
   tools, and simulated feed.
 - **Ruff and `git diff --check` passed.**
@@ -372,7 +372,7 @@ src/navigator/
   core/data/     subway_graph.json — the network, generated from the MTA GTFS feed
 eval/            four prompt sets, ground-truth graders, runner
 scripts/         build_graph.py (GTFS → graph), run_all.sh (servers + gateway), demo.py (CLI)
-tests/           125 unit + integration tests (incl. live MCP-over-HTTP and the LLM path)
+tests/           129 unit + integration tests (incl. live MCP-over-HTTP and the LLM path)
 ```
 
 ## Design notes
@@ -473,8 +473,6 @@ Stated plainly, because a reviewer will find them anyway:
   live arrival countdowns.
 - **Landmarks are a small hand-written table.** Stations come from GTFS; "Williamsburg"
   and "Central Park" do not.
-- **Two lower-priority audit findings remain open.** Non-string JSON question or
-  thread-ID values (and non-object request bodies) can trigger HTTP 500s instead of
-  validation errors. Routes consisting entirely of an in-complex walk can return
-  `found=True` with an empty itinerary and a `No route found.` summary. Neither was
-  changed by the high-priority fixes documented above.
+- **One lower-priority audit finding remains open.** Routes consisting entirely of an
+  in-complex walk can return `found=True` with an empty itinerary and a
+  `No route found.` summary.

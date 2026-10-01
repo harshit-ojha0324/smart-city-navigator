@@ -269,6 +269,14 @@ def test_gateway_rejects_oversized_questions():
     assert c.post("/api/ask", json={"question": "x" * 501}).status_code == 413
 
 
+@pytest.mark.parametrize("body,status", [
+    ({"question": 5}, 400), ([1, 2], 400), ("hi", 400),
+    ({"question": "Is the L train running?", "thread_id": 7}, 200),
+])
+def test_gateway_answers_malformed_json_without_a_500(body, status):
+    assert create_app().test_client().post("/api/ask", json=body).status_code == status
+
+
 def test_demo_page_never_injects_step_text_as_html():
     body = create_app().test_client().get("/").get_data(as_text=True)
     script = create_app().test_client().get("/static/navigator.js").get_data(as_text=True)
