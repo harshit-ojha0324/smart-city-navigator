@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import re
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
 from navigator.core.geocode import display_name, rider_lines
 
@@ -27,10 +27,6 @@ def message_text(content) -> str:
         return "".join(p if isinstance(p, str) else str(p.get("text", ""))
                        for p in content if isinstance(p, (str, dict)))
     return str(content or "")
-
-
-def last_ai(messages: list):
-    return next((m for m in reversed(messages) if isinstance(m, AIMessage)), None)
 
 
 def tool_results(messages: list) -> list[tuple[str, object]]:
