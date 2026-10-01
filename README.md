@@ -111,7 +111,7 @@ Each wraps one slice of the transit core and is independently runnable
 
 ```bash
 make install          # venv + deps from requirements.lock (hash-pinned)
-make test             # 109 tests, incl. the 3 MCP servers booted over HTTP
+make test             # 125 tests, incl. the 3 MCP servers booted over HTTP
 make lint             # ruff
 make eval             # core 20-prompt suite
 make eval ARGS="--set all"      # all four sets (70 prompts)
@@ -169,6 +169,42 @@ CSS and JavaScript with no external font or frontend framework dependency.
 UI files live in `src/navigator/gateway/templates/index.html` and
 `src/navigator/gateway/static/`; the Flask gateway renders the template and serves
 the assets. The existing Dockerfile copies them with `src/`.
+
+## Hosting a live demo
+
+The app has not been cloud-deployed or tested on a hosting provider yet. A small
+public demo can use one web service with the existing in-process transport; the
+three separate MCP server processes are optional for this setup.
+
+Set these environment variables on the web service:
+
+```env
+NAVIGATOR_TRANSPORT=inprocess
+NAVIGATOR_LLM_PROVIDER=none
+NAVIGATOR_SIMULATE_FEED=0
+```
+
+This keeps routing, station lookup, and service-status tools in the gateway
+process, uses the deterministic planner with no model API charges, and attempts
+to read live MTA data. If the service-alert feed fails, the existing labelled
+simulation fallback still applies. These settings are for a single-service
+deployment; the supplied `docker-compose.yml` configures the separate MCP services.
+
+[Render Free](https://render.com/docs/free) is an option for a small demo. Its
+published limits include sleeping after 15 idle minutes, roughly a minute to wake,
+750 shared instance hours per workspace per month, and ephemeral local storage.
+SQLite checkpoints will not survive a restart there. Bandwidth and build quotas
+also apply; excess usage can incur charges with a payment method, or cause
+suspension without one. Check the provider's current terms before deploying.
+
+For model-driven question understanding, Gemini offers a free API tier subject to
+quotas; paid model usage is separate from hosting, and one question can make several
+model calls. See [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing).
+The deterministic configuration above avoids those calls entirely.
+
+Before publishing, replace the Dockerfile's Flask development-server command with
+a production WSGI server and verify SSE streaming and memory use on the chosen
+host. That deployment work has not been implemented or validated yet.
 
 ## The network
 
@@ -261,6 +297,19 @@ real itinerary doesn't use. Status answers are checked against what the feed rep
 for that line at that moment. Keyword matching can't tell a correct itinerary from a
 fluent wrong one; this can.
 
+### Latest validation after the audit fixes
+
+- **125 tests passed**, including the three MCP servers over local HTTP.
+- **70/70 evaluation cases passed** with the deterministic planner, in-process
+  tools, and simulated feed.
+- **Ruff and `git diff --check` passed.**
+
+The new regressions cover live alert-type parsing and model replies that omit tool
+calls, contradict route results, hide ambiguity, hide unavailable outage data, or
+narrate success after a tool validation failure. LLM behavior was checked using
+scripted responses; hosted models, cloud deployment, and post-fix local-model
+benchmarks were not exercised in this validation.
+
 ### Scores
 
 The table preserves the original planner and local-model measurements. The
@@ -323,7 +372,7 @@ src/navigator/
   core/data/     subway_graph.json — the network, generated from the MTA GTFS feed
 eval/            four prompt sets, ground-truth graders, runner
 scripts/         build_graph.py (GTFS → graph), run_all.sh (servers + gateway), demo.py (CLI)
-tests/           109 unit + integration tests (incl. live MCP-over-HTTP and the LLM path)
+tests/           125 unit + integration tests (incl. live MCP-over-HTTP and the LLM path)
 ```
 
 ## Design notes
@@ -405,6 +454,7 @@ tests/           109 unit + integration tests (incl. live MCP-over-HTTP and the 
 Stated plainly, because a reviewer will find them anyway:
 
 - **Not cloud-deployed.** It runs locally (`make run`) or under `docker compose`.
+  The hosting section is guidance, not a completed deployment.
 - **LangSmith tracing is wired but unrun.** Setting `LANGSMITH_API_KEY` turns on tracing
   for every node and tool call in eval runs, but no trace has been captured here, so there is no
   screenshot and no token-cost figure. Their hosted eval experiments are deliberately
@@ -423,3 +473,8 @@ Stated plainly, because a reviewer will find them anyway:
   live arrival countdowns.
 - **Landmarks are a small hand-written table.** Stations come from GTFS; "Williamsburg"
   and "Central Park" do not.
+- **Two lower-priority audit findings remain open.** Non-string JSON question or
+  thread-ID values (and non-object request bodies) can trigger HTTP 500s instead of
+  validation errors. Routes consisting entirely of an in-complex walk can return
+  `found=True` with an empty itinerary and a `No route found.` summary. Neither was
+  changed by the high-priority fixes documented above.
