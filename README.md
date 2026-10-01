@@ -373,7 +373,7 @@ Stated plainly, because a reviewer will find them anyway:
 
 - **Not cloud-deployed.** It runs locally (`make run`) or under `docker compose`.
 - **LangSmith tracing is wired but unrun.** Setting `LANGSMITH_API_KEY` turns on tracing
-  for every node and tool call, but no trace has been captured here, so there is no
+  for every node and tool call in eval runs, but no trace has been captured here, so there is no
   screenshot and no token-cost figure. Their hosted eval experiments are deliberately
   not wired: grading is local and against ground truth, and a second copy of that logic
   upstream would be one more thing to keep honest. Scores in this README come from

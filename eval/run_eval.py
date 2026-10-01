@@ -48,7 +48,6 @@ def _enable_langsmith_tracing() -> bool:
         return False
     os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
     os.environ.setdefault("LANGCHAIN_PROJECT", "smart-city-navigator-eval")
-    os.environ.setdefault("LANGCHAIN_API_KEY", key)
     return True
 
 
