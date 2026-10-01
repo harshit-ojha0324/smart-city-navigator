@@ -36,9 +36,9 @@ def _sse(event: dict) -> str:
 
 def _read_question(raw) -> tuple[str | None, tuple | None]:
     """Validated question text, or (None, error response)."""
-    question = (raw or "").strip()
+    question = raw.strip() if isinstance(raw, str) else ""
     if not question:
-        return None, (jsonify({"error": "question is required"}), 400)
+        return None, (jsonify({"error": "question must be a non-empty string"}), 400)
     if len(question) > MAX_QUESTION_CHARS:
         return None, (jsonify({"error": f"question exceeds {MAX_QUESTION_CHARS} characters"}), 413)
     return question, None
@@ -47,7 +47,7 @@ def _read_question(raw) -> tuple[str | None, tuple | None]:
 def _thread_id(raw) -> str:
     """Caller's conversation id, else a fresh one — never a shared default, so
     two users can't land on the same checkpointed thread."""
-    return (raw or "").strip()[:128] or uuid.uuid4().hex
+    return (raw if isinstance(raw, str) else "").strip()[:128] or uuid.uuid4().hex
 
 
 def create_app() -> Flask:
@@ -60,7 +60,9 @@ def create_app() -> Flask:
 
     @app.post("/api/ask")
     def ask():
-        data = request.get_json(silent=True) or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):  # a JSON list, string or number body
+            data = {}
         question, err = _read_question(data.get("question"))
         if err:
             return err
