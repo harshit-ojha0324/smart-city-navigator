@@ -4,7 +4,8 @@ LLM factory + deterministic offline planner.
 Two ways the agent can reason, and the choice is one env var:
 
   * A tool-calling chat model — Gemini or a local Ollama model. It classifies
-    the question, picks the tools, and writes the answer.
+    the question and picks the tools. The worker renders the answer from tool
+    results.
   * A deterministic planner when no model is configured — regex intent + entity
     extraction emitting the same tool calls, so the graph, the MCP servers and
     the eval suite run end-to-end in CI with no key, no network and no

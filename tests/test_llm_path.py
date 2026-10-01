@@ -97,7 +97,7 @@ def test_llm_router_can_chain_two_agents():
     assert [w["agent"] for w in state["worker_results"]] == ["route_planner", "service_advisor"]
 
 
-def test_llm_answer_is_used_when_the_model_writes_one():
+def test_llm_prose_cannot_override_tool_status_or_hide_simulation():
     model = ScriptedModel({
         "router": _router('{"intent": "status", "needs_status": false}'),
         "worker": [AIMessage(content="", tool_calls=[
@@ -105,7 +105,8 @@ def test_llm_answer_is_used_when_the_model_writes_one():
             AIMessage(content="The L is running normally right now.")],
     })
     state = _run("is the L ok", model)
-    assert state["answer"] == "The L is running normally right now."
+    assert state["answer"].startswith("The L train:")
+    assert "simulated" in state["answer"]
 
 
 def test_model_is_given_only_its_agents_tools():
@@ -156,7 +157,9 @@ def test_model_reply_in_content_parts_is_read():
             AIMessage(content=[{"type": "text", "text": "The L is fine."}])],
     })
     state = _run("is the L ok", model)
-    assert state["router"] == "llm" and state["answer"] == "The L is fine."
+    assert state["router"] == "llm"
+    assert state["answer"].startswith("The L train:")
+    assert "simulated" in state["answer"]
 
 
 def test_endless_tool_calling_is_capped_not_looped():
@@ -218,3 +221,63 @@ def test_a_key_selects_gemini(monkeypatch):
 def test_a_broken_provider_degrades_instead_of_raising(monkeypatch):
     monkeypatch.setenv("NAVIGATOR_LLM_PROVIDER", "nonsense-provider")
     assert llm_module.get_chat_model() is None
+
+
+@pytest.mark.parametrize("intent,question", [
+    ("status", "Is the L train running?"),
+    ("route", "Times Square to Coney Island"),
+    ("info", "Which lines stop at Jay St?"),
+])
+def test_model_cannot_answer_without_tool_evidence(intent, question):
+    model = ScriptedModel({
+        "router": _router('{"intent": "' + intent + '", "needs_status": false}'),
+        "worker": AIMessage(content="Invented transit facts."),
+    })
+    state = _run(question, model)
+    assert "couldn't verify" in state["answer"]
+    assert "Invented" not in state["answer"]
+    assert state["worker_results"][0]["data"] == {}
+
+
+@pytest.mark.parametrize("origin,destination,expected", [
+    ("Atlantis", "Coney Island", "couldn't plan"),
+    ("23 St", "Coney Island", "Which did you mean"),
+    ("Times Square", "Coney Island", "Take the N"),
+])
+def test_model_cannot_override_trip_results(origin, destination, expected):
+    model = ScriptedModel({
+        "router": _router('{"intent": "route", "needs_status": false}'),
+        "worker": [AIMessage(content="", tool_calls=[{
+            "name": "plan_trip", "args": {"origin": origin, "destination": destination},
+            "id": "trip", "type": "tool_call",
+        }]), AIMessage(content="Take the imaginary train. It takes 1 minute.")],
+    })
+    state = _run(f"From {origin} to {destination}", model)
+    assert expected in state["answer"]
+    assert "imaginary" not in state["answer"]
+
+
+def test_model_cannot_hide_unavailable_outage_data():
+    model = ScriptedModel({
+        "router": _router('{"intent": "status", "needs_status": false}'),
+        "worker": [AIMessage(content="", tool_calls=[{
+            "name": "list_elevator_outages", "args": {"station_contains": "Times Sq"},
+            "id": "outages", "type": "tool_call",
+        }]), AIMessage(content="No elevator outages are reported.")],
+    })
+    state = _run("Elevator outages at Times Sq?", model)
+    assert "unavailable" in state["answer"]
+    assert "No elevator outages" not in state["answer"]
+
+
+def test_model_cannot_narrate_success_after_tool_validation_error():
+    model = ScriptedModel({
+        "router": _router('{"intent": "status", "needs_status": false}'),
+        "worker": [AIMessage(content="", tool_calls=[{
+            "name": "get_line_status", "args": {},
+            "id": "invalid", "type": "tool_call",
+        }]), AIMessage(content="The L is running normally.")],
+    })
+    state = _run("Is the L running?", model)
+    assert "error" in state["answer"].lower()
+    assert "running normally" not in state["answer"]

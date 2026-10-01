@@ -26,7 +26,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from navigator.core.graph_data import feed_line
 
 from .llm import initial_tool_calls, prompt_suffix
-from .nodes import compose_answer, last_ai, message_text, tool_results
+from .nodes import compose_answer, tool_results
 from .state import WorkerState
 
 # A model that keeps calling tools instead of answering will loop until the
@@ -123,16 +123,17 @@ def build_worker(spec: WorkerSpec, tools: list, llm):
 
     async def finish(state) -> dict:
         messages = state["messages"]
-        last = last_ai(messages)
         results = tool_results(messages)
         # Structured data is kept on both paths so the supervisor can hand it to
         # the next agent (route lines → service status). An itinerary wins over a
         # later lookup: a model that plans a trip and then checks a station name
         # must still hand the route on.
         data = _carry_forward(results)
-        text = message_text(last.content) if last is not None else ""
-        if llm is not None and text and not getattr(last, "tool_calls", None):
-            result = text
+        # Tool selection can be model-driven; factual answers must come from
+        # the tools. Free-form model prose can contradict results or omit an
+        # error, disambiguation request, or simulated-data disclosure.
+        if llm is not None and not results:
+            result = "I couldn't verify that with the transit tools. Please try asking again."
         else:
             result = compose_answer(spec.intent, results, state["task"])
         return {"result": result, "data": data}

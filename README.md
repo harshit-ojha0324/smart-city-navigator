@@ -9,8 +9,8 @@ Server-Sent-Events gateway** that streams the agents' reasoning live, and measur
 **four separately-scored eval sets**, with **LangSmith tracing** available behind a key.
 
 Ask *"How do I get from Times Square to Coney Island?"* and watch the agents
-route the question, call the tools, and synthesize a grounded itinerary — never a
-hallucinated one.
+route the question, call the tools, and render an itinerary from the routing tool
+results.
 
 ```
 Take the N from Times Sq-42 St to Coney Island-Stillwell Av (16 stops).
@@ -58,10 +58,13 @@ and merges). Each agent's tool loop is capped, and an agent that fails returns a
 plain apology rather than taking the turn down with it.
 
 Inside each agent the reasoner is whichever **chat model** is configured — Gemini
-or a local Ollama model — doing the tool-calling itself. With none configured, a
-**deterministic planner** (regex intent + entity extraction) emits the *same* tool
-calls, so every agent, the MCP servers and the whole eval suite run end-to-end in
-CI with no API key and zero flakiness.
+or a local Ollama model — doing the tool-calling itself. Final answers are rendered
+from tool results on both paths, preserving errors, clarification requests, and
+simulated-data disclosures; model prose cannot override them. A model that returns
+no tool evidence gets a verification failure instead of a factual answer. With none
+configured, a **deterministic planner** (regex intent + entity extraction) emits the
+*same* tool calls, so every agent, the MCP servers and the whole eval suite run
+end-to-end in CI without an API key.
 
 The same choice governs the supervisor: with a model configured the **LLM routes**
 each question (intent, and whether a trip question also needs a service check) and
@@ -241,11 +244,11 @@ fluent wrong one; this can.
 
 ### Scores
 
-Same graph, same tools, same prompts — only the reasoner differs. The planner is
-scored twice: the number each set gave on its first run, and where it stands after
-the gaps that set exposed were fixed.
+The table preserves the original planner and local-model measurements. The
+current planner totals were revalidated after the audit fixes; the local-model
+column remains historical, as explained below.
 
-| Set | Planner, first run | Planner, now | Local `qwen3:8b` |
+| Set | Planner, first run | Planner, now | Local `qwen3:8b` (historical) |
 |---|---|---|---|
 | core (20) | — (built against it) | **20/20** | 16/20 |
 | held-out (20) | 15/20 | **20/20** | 16/20 |
@@ -253,22 +256,21 @@ the gaps that set exposed were fixed.
 | wild (15) | 13/15 | **15/15** | not scored |
 | per question | | ~0.01s | 29.7s median |
 
-The comparison is more useful than the totals. The model is **better at language
-and worse at discipline**:
+The local-model scores and latency above predate the audit grounding fix, when
+workers could return model-written answers directly. They have not been rerun with
+the current tool-result renderer. That historical run exposed two patterns:
 
-- It needs no vocabulary list. "trains messed up on the 6?", "what's the deal with
-  the 7 today" and "hows the L looking" all just work — each of those cost the
+- It needed no vocabulary list. "trains messed up on the 6?", "what's the deal with
+  the 7 today" and "hows the L looking" all worked — each of those cost the
   planner a held-out failure and a regex patch.
-- It loses on the things the deterministic composer gets for free. Its 13 remaining
-  failures are almost all completeness and consistency: naming only 4 of the 10 lines
+- It lost on completeness and consistency in 13 cases: naming only 4 of the 10 lines
   a station complex serves, planning the Q when its own tool returned the N, and
   refusing without saying what it couldn't find.
 
-So on this narrow, fully-specified task the regex planner is still the better
-answerer, at a millisecond instead of half a minute — and it is not a fallback that
-happens to work, it is the thing that works. The model earns its place on input
-nobody wrote a rule for, which is exactly what the held-out sets keep proving is a
-bottomless supply.
+The current implementation keeps model-driven routing and tool selection, but
+renders final answers from tool results on both paths. The deterministic planner
+still passes all 70 existing cases; a fresh model benchmark is needed before
+comparing the two paths under the new answer policy.
 
 Running a real model was also the only way three agent bugs surfaced, all of them
 mine rather than the model's:
@@ -358,6 +360,12 @@ tests/           109 unit + integration tests (incl. live MCP-over-HTTP and the 
   simulated, a landmark snapped to a station says so (and one too far from any
   station — LaGuardia, 3 km from the nearest stop — is refused rather than routed),
   and "no elevator outages" is never claimed when the outage feed couldn't be read.
+- **Model prose cannot override tool results.** Worker answers use the shared
+  deterministic composer even when an LLM chooses the tools. Route errors,
+  disambiguation requests, unavailable data, and simulation labels are preserved.
+  A model response with no tool evidence returns a verification failure
+  (`tests/test_llm_path.py`). This prevents unsupported final prose; it does not
+  guarantee that a model chose the right tool arguments for the rider's question.
 - **Scores say what produced them.** Every eval report names its reasoner, the four
   sets are scored apart, and each says whether it has been tuned on. A number without
   that context is worth nothing — and a set scored twice is worth less than the first
