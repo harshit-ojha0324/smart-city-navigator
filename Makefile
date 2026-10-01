@@ -1,4 +1,4 @@
-.PHONY: help venv install lock test eval eval-heldout eval-fresh eval-mcp graph servers gateway run demo lint clean
+.PHONY: help venv install lock test eval eval-heldout eval-fresh eval-mcp graph run demo lint clean
 
 PY ?= python3
 VENV := .venv
@@ -16,7 +16,6 @@ help:
 	@echo "  eval-fresh    run the 15 prompts written after the planner froze"
 	@echo "  graph      rebuild the station graph from the MTA GTFS feed"
 	@echo "  eval-mcp   run the eval suite through the live MCP servers"
-	@echo "  servers    start the 3 FastMCP servers (foreground)"
 	@echo "  run        start 3 MCP servers + gateway (http://localhost:8000)"
 	@echo "  demo       CLI demo: make demo Q='from Times Square to Coney Island'"
 	@echo "  clean      remove venv + caches"
@@ -29,9 +28,10 @@ install: $(VENV)
 	$(BIN)/pip install -q --require-hashes -r requirements.lock
 
 # Resolve requirements*.txt into the hash-pinned lockfile CI and Docker install.
-# Run after changing a version bound; commit the result.
+# Run after changing a version bound; commit the result. 3.10 is CI's oldest
+# Python — without it uv resolves for the running interpreter and drops 3.10 pins.
 lock:
-	uv pip compile requirements-dev.txt --universal --generate-hashes -o requirements.lock
+	uv pip compile requirements-dev.txt --universal --python-version 3.10 --generate-hashes -o requirements.lock
 
 test:
 	$(BIN)/pytest -q
@@ -59,9 +59,6 @@ graph:
 
 eval-mcp:
 	$(BIN)/python eval/run_eval.py --transport mcp
-
-servers:
-	NAVIGATOR_SIMULATE_FEED=$${NAVIGATOR_SIMULATE_FEED:-0} bash scripts/run_all.sh
 
 run:
 	PYTHON=$(BIN)/python bash scripts/run_all.sh

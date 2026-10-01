@@ -103,10 +103,10 @@ def _simulate() -> bool:
 
 
 # ── Service alerts ─────────────────────────────────────────────────────
-def fetch_alerts(*, use_cache: bool = True) -> dict:
+def fetch_alerts() -> dict:
     """Return {line_id: {severity, status, message, updatedAt}} for all lines."""
     global _cached
-    if use_cache and _cached is not None and time.monotonic() < _cached[0]:
+    if _cached is not None and time.monotonic() < _cached[0]:
         return _cached[1]
 
     if _simulate():
@@ -118,8 +118,7 @@ def fetch_alerts(*, use_cache: bool = True) -> dict:
             print(f"[mta_feed] alerts fetch error: {exc} — using simulation")
             result = _simulated_alerts()
 
-    if use_cache:
-        _cached = (time.monotonic() + ALERTS_TTL, result)
+    _cached = (time.monotonic() + ALERTS_TTL, result)
     return result
 
 
@@ -232,9 +231,8 @@ def _simulated_alerts() -> dict:
     return result
 
 
-def status_summary(alerts: dict | None = None) -> str:
-    """Compact human summary of current status — used for LLM context injection."""
-    alerts = alerts or fetch_alerts()
+def status_summary(alerts: dict) -> str:
+    """Compact human summary of current status — the get_service_status summary."""
     good, affected = [], []
     for line_id, info in sorted(alerts.items()):
         if info.get("severity", 0) == 0:

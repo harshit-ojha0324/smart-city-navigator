@@ -16,7 +16,6 @@ treat one complex as one place while still flagging the six unrelated "86 St"s.
 from __future__ import annotations
 
 import json
-from functools import lru_cache
 from pathlib import Path
 
 _DATA = Path(__file__).parent / "data" / "subway_graph.json"
@@ -90,7 +89,6 @@ def line_label(line_id: str) -> str:
     return SUBWAY_LINES.get(line_id, {}).get("label", line_id)
 
 
-@lru_cache(maxsize=64)
 def feed_line(line_id: str) -> str:
     """Map a schedule route id to the line id the real-time alerts feed uses.
 

@@ -7,8 +7,7 @@ tests assert on what the agent does with the replies — including the replies
 that come back malformed, which is where an LLM-driven agent usually breaks.
 
 `eval/run_eval.py --set all` runs the identical path against a real model
-(Gemini, an OpenAI-compatible endpoint, or a local Ollama one); the README
-records those scores.
+(Gemini or a local Ollama one); the README records those scores.
 """
 import asyncio
 
@@ -191,11 +190,22 @@ def test_a_failing_agent_does_not_take_down_the_turn():
 
 # ── provider selection ─────────────────────────────────────────────────
 def test_no_configuration_means_the_offline_planner(monkeypatch):
-    for var in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY"):
+    for var in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("NAVIGATOR_LLM_PROVIDER", "auto")
     assert llm_module.get_chat_model() is None
     assert "deterministic planner" in llm_module.describe_reasoner()
+
+
+def test_a_provider_that_cannot_load_gets_no_credit(monkeypatch):
+    """Eval reports quote describe_reasoner(), so it must name what actually
+    answered: a provider chosen with no key falls back to the planner, and the
+    planner's score must not be filed under the model's name."""
+    monkeypatch.setenv("NAVIGATOR_LLM_PROVIDER", "gemini")
+    for var in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    assert llm_module.get_chat_model() is None
+    assert llm_module.describe_reasoner() == "deterministic planner (gemini unavailable)"
 
 
 def test_a_key_selects_gemini(monkeypatch):

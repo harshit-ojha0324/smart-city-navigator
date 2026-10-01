@@ -32,17 +32,11 @@ sys.path.insert(0, str(ROOT / "eval"))
 from dataset import CATEGORIES, SETS, cases_for  # noqa: E402
 from graders import grade  # noqa: E402
 
+from navigator.agent.llm import describe_reasoner  # noqa: E402
+
 # Per-question ceiling. Generous for a slow local model, strict enough that a
 # runaway generation can't stall a 55-prompt suite.
 CASE_TIMEOUT = float(os.environ.get("NAVIGATOR_EVAL_TIMEOUT", "240"))
-
-
-def _reasoner() -> str:
-    """Which brain answered — quoted in the report so a score is never
-    ambiguous about whether an LLM was in the loop."""
-    from navigator.agent.llm import describe_reasoner
-
-    return describe_reasoner()
 
 
 def _enable_langsmith_tracing() -> bool:
@@ -73,17 +67,12 @@ async def _run_all(cases, transport):
         except asyncio.TimeoutError:
             # One local-model generation once ran for an hour. A stalled case is
             # a failed case; it must not hold the suite hostage.
-            state = {"answer": "", "intent": "", "steps": []}
-            results.append((case, state, False, f"timed out after {CASE_TIMEOUT:.0f}s",
-                            time.perf_counter() - started))
-            continue
+            state, verdict = {"answer": ""}, (False, f"timed out after {CASE_TIMEOUT:.0f}s")
         except Exception as exc:  # a crash is a failed case, not a dead suite
-            state = {"answer": f"[{type(exc).__name__}] {exc}", "intent": "", "steps": []}
-            results.append((case, state, False, f"agent raised {type(exc).__name__}",
-                            time.perf_counter() - started))
-            continue
-        passed, reason = grade(case, state)
-        results.append((case, state, passed, reason, time.perf_counter() - started))
+            state, verdict = {"answer": f"[{type(exc).__name__}] {exc}"}, (False, f"agent raised {type(exc).__name__}")
+        else:
+            verdict = grade(case, state)
+        results.append((case, state, *verdict, time.perf_counter() - started))
     return results
 
 
@@ -133,7 +122,7 @@ def main() -> int:
 
     cases = cases_for(args.which, args.category)
     print(f"Running {len(cases)} cases | set={args.which} | transport={args.transport} | "
-          f"reasoner={_reasoner()} | feed_simulated={os.environ.get('NAVIGATOR_SIMULATE_FEED')}")
+          f"reasoner={describe_reasoner()} | feed_simulated={os.environ.get('NAVIGATOR_SIMULATE_FEED')}")
     results = asyncio.run(_run_all(cases, args.transport))
     rate = _print_report(results)
 

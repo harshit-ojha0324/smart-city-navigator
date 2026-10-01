@@ -53,19 +53,20 @@ def inprocess_tools() -> list:
 # Tool *definitions* are stable for a server's lifetime, and each MCP tool call
 # opens its own session, so the listing can be reused across requests instead of
 # re-running the 3-server handshake + list_tools on every question.
-_MCP_TOOL_CACHE: dict[str | None, list] = {}
+_mcp_tools: list | None = None
 
 
-async def load_mcp_tools(host: str | None = None) -> list:
+async def load_mcp_tools() -> list:
     """Load tools from the 3 live MCP servers over streamable HTTP."""
-    if host not in _MCP_TOOL_CACHE:
+    global _mcp_tools
+    if _mcp_tools is None:
         from .mcp_client import load_tools
 
-        _MCP_TOOL_CACHE[host] = await load_tools(all_server_urls(host))
-    return list(_MCP_TOOL_CACHE[host])
+        _mcp_tools = await load_tools(all_server_urls())
+    return list(_mcp_tools)
 
 
-async def build_tools(transport: str = "inprocess", host: str | None = None) -> list:
+async def build_tools(transport: str = "inprocess") -> list:
     if transport == "mcp":
-        return await load_mcp_tools(host)
+        return await load_mcp_tools()
     return inprocess_tools()

@@ -6,15 +6,8 @@ from navigator.mcp_servers import alerts_server, geocode_server, routing_server
 
 
 def call(server, name, args):
-    """Invoke a tool in-process and decode its JSON payload.
-
-    mcp 2.x returns a CallToolResult carrying content blocks; v1 returned the
-    blocks directly."""
-    res = asyncio.run(server.mcp.call_tool(name, args))
-    blocks = getattr(res, "content", res)
-    payload = blocks[0] if isinstance(blocks, (list, tuple)) else blocks
-    text = getattr(payload, "text", None)
-    return json.loads(text) if text else payload
+    """Invoke a tool in-process and decode its JSON payload."""
+    return json.loads(asyncio.run(server.mcp.call_tool(name, args)).content[0].text)
 
 
 def test_alerts_service_status():

@@ -2,9 +2,9 @@
 Shared node helpers and the `understand` entry node.
 
 The plan/tools/finish loop now lives per specialist agent in workers.py; the
-supervisor topology lives in graph.py. This module holds what both reuse: the
-stream-writer emit helper, message parsing, the query-understanding node, and
-the deterministic answer composer.
+supervisor topology lives in graph.py. This module holds what both reuse:
+message parsing, the query-understanding node, and the deterministic answer
+composer.
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 
 from navigator.core.geocode import display_name, rider_lines
 
-from .llm import DeterministicPlanner, prompt_suffix
+from .llm import classify, destination_only, prompt_suffix
 
 
 def message_text(content) -> str:
@@ -30,10 +30,7 @@ def message_text(content) -> str:
 
 
 def last_ai(messages: list):
-    for m in reversed(messages):
-        if isinstance(m, AIMessage):
-            return m
-    return None
+    return next((m for m in reversed(messages) if isinstance(m, AIMessage)), None)
 
 
 def tool_results(messages: list) -> list[tuple[str, object]]:
@@ -87,7 +84,7 @@ async def classify_with_llm(llm, question: str) -> tuple[str, bool] | None:
         return None
 
 
-def make_understand_node(planner: DeterministicPlanner, llm=None):
+def make_understand_node(llm=None):
     """Entry node: decide what the rider is asking for.
 
     With a model configured the LLM routes; the regex planner is the fallback
@@ -98,7 +95,7 @@ def make_understand_node(planner: DeterministicPlanner, llm=None):
         question = state["question"]
         routed = await classify_with_llm(llm, question) if llm is not None else None
         if routed is None:
-            intent, needs_status = planner.classify(question), None
+            intent, needs_status = classify(question), None
             router = "planner"
         else:
             intent, needs_status = routed
@@ -121,7 +118,7 @@ def compose_answer(intent: str, results: list[tuple[str, object]], question: str
                     "stations, live service status, and finding the nearest station. "
                     "What trip can I plan for you?")
         if intent == "route":
-            dest = DeterministicPlanner().destination_only(question)
+            dest = destination_only(question)
             where = f" to {dest}" if dest else ""
             return (f"Where are you starting from? Tell me your origin station or "
                     f"neighborhood and I'll plan the trip{where}.")
