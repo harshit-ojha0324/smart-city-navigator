@@ -17,7 +17,6 @@ in words ("take the L, transfer to the N at Union Sq").
 from __future__ import annotations
 
 import heapq
-from functools import lru_cache
 
 from .graph_data import (
     RIDE_EDGES,
@@ -185,7 +184,6 @@ def _summary(legs: list[dict], minutes: float, stops: int) -> str:
     )
 
 
-@lru_cache(maxsize=512)
 def plan_route(start_id: str, end_id: str) -> dict:
     """
     Plan the fastest subway route between two station ids.
