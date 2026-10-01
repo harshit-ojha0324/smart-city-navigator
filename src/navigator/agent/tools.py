@@ -43,11 +43,8 @@ def _as_langchain_tool(fn) -> BaseTool:
     return tool(run)
 
 
-INPROCESS_TOOLS: list[BaseTool] = [_as_langchain_tool(fn) for fn in _SERVER_FUNCTIONS]
-
-
-def inprocess_tools() -> list:
-    return list(INPROCESS_TOOLS)
+def inprocess_tools() -> list[BaseTool]:
+    return [_as_langchain_tool(fn) for fn in _SERVER_FUNCTIONS]
 
 
 # Tool *definitions* are stable for a server's lifetime, and each MCP tool call

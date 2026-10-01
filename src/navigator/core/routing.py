@@ -204,7 +204,6 @@ def plan_route(start_id: str, end_id: str) -> dict:
             "total_minutes": 0,
             "total_stops": 0,
             "num_transfers": 0,
-            "transfer_minutes": TRANSFER_MINUTES,
             "legs": [],
             "summary": "You are already there.",
         }
@@ -226,7 +225,6 @@ def plan_route(start_id: str, end_id: str) -> dict:
         "total_minutes": int(round(minutes)),
         "total_stops": total_stops,
         "num_transfers": sum(1 for leg in legs[1:] if not leg["walk"]),
-        "transfer_minutes": TRANSFER_MINUTES,
         "legs": legs,
         "summary": _summary(legs, minutes, total_stops),
     }
