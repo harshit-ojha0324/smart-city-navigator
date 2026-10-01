@@ -1,4 +1,4 @@
-.PHONY: help venv install lock test eval eval-heldout eval-fresh eval-mcp graph run demo lint clean
+.PHONY: help install lock test lint eval graph run demo clean
 
 PY ?= python3
 VENV := .venv
@@ -11,11 +11,10 @@ help:
 	@echo "  lock       re-resolve requirements*.txt into requirements.lock"
 	@echo "  test       run the pytest suite"
 	@echo "  lint       ruff check"
-	@echo "  eval       run the core 20-prompt eval suite (in-process)"
-	@echo "  eval-heldout  run the 20 prompts never used for tuning"
-	@echo "  eval-fresh    run the 15 prompts written after the planner froze"
+	@echo "  eval       run the core 20-prompt eval suite (in-process); pass flags in ARGS:"
+	@echo "             ARGS='--set heldout'  (core | heldout | fresh | wild | all)"
+	@echo "             ARGS='--transport mcp'  through the live MCP servers"
 	@echo "  graph      rebuild the station graph from the MTA GTFS feed"
-	@echo "  eval-mcp   run the eval suite through the live MCP servers"
 	@echo "  run        start 3 MCP servers + gateway (http://localhost:8000)"
 	@echo "  demo       CLI demo: make demo Q='from Times Square to Coney Island'"
 	@echo "  clean      remove venv + caches"
@@ -40,25 +39,10 @@ lint:
 	$(BIN)/ruff check .
 
 eval:
-	$(BIN)/python eval/run_eval.py
-
-eval-heldout:
-	$(BIN)/python eval/run_eval.py --set heldout
-
-eval-fresh:
-	$(BIN)/python eval/run_eval.py --set fresh
-
-eval-wild:
-	$(BIN)/python eval/run_eval.py --set wild
-
-eval-all:
-	$(BIN)/python eval/run_eval.py --set all
+	$(BIN)/python eval/run_eval.py $(ARGS)
 
 graph:
 	$(BIN)/python scripts/build_graph.py
-
-eval-mcp:
-	$(BIN)/python eval/run_eval.py --transport mcp
 
 run:
 	PYTHON=$(BIN)/python bash scripts/run_all.sh

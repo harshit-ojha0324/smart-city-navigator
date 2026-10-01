@@ -182,12 +182,6 @@ def test_every_route_names_a_real_line_or_a_walk():
             assert leg["walk"] or leg["line"] in geocode.STATION_BY_ID[leg["from_id"]]["lines"]
 
 
-def test_cached_route_is_not_mutated_by_callers():
-    routing_server.plan_trip("Williamsburg", "Times Square")
-    direct = routing.plan_route(station_id("Marcy Av"), station_id("Times Square"))
-    assert "nearest modeled" not in direct["summary"]
-
-
 # ── multi-agent hand-off ───────────────────────────────────────────────
 def test_compound_query_scopes_status_to_the_route_lines():
     st = _run("How do I get from Bedford Av to Herald Sq and are there delays?")

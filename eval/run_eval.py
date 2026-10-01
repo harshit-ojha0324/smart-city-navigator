@@ -27,7 +27,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(ROOT / "eval"))
 
 from dataset import CATEGORIES, SETS, cases_for  # noqa: E402
 from graders import grade  # noqa: E402
@@ -49,7 +48,6 @@ def _enable_langsmith_tracing() -> bool:
         return False
     os.environ.setdefault("LANGCHAIN_TRACING_V2", "true")
     os.environ.setdefault("LANGCHAIN_PROJECT", "smart-city-navigator-eval")
-    os.environ.setdefault("LANGCHAIN_API_KEY", key)
     return True
 
 
