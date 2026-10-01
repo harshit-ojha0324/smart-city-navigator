@@ -19,19 +19,14 @@ from contextlib import asynccontextmanager
 
 from langgraph.graph import END, StateGraph
 
-from .llm import _STATUS_WORDS, DeterministicPlanner, get_chat_model
+from .llm import _STATUS_WORDS, get_chat_model
 from .nodes import compose_answer, make_understand_node
 from .state import AgentState
 from .tools import build_tools
 from .workers import WORKER_SPECS, build_worker, make_worker_node
 
 # intent → ordered list of specialist agents the supervisor delegates to
-_PLAN = {
-    "route": ["route_planner"],
-    "status": ["service_advisor"],
-    "info": ["station_info"],
-    "other": [],
-}
+_PLAN = {spec.intent: [spec.name] for spec in WORKER_SPECS}
 
 
 def _needed_workers(state) -> list[str]:
@@ -47,65 +42,55 @@ def _needed_workers(state) -> list[str]:
     return plan
 
 
-def make_supervisor_node():
-    async def supervise(state) -> dict:
-        done = {w["agent"] for w in state.get("worker_results", [])}
-        nxt = next((w for w in _needed_workers(state) if w not in done), "synthesize")
-        return {"route": nxt,
-                "steps": [{"node": "supervisor", "text": f"Supervisor routing to: {nxt}"}]}
-
-    return supervise
+async def supervise(state) -> dict:
+    done = {w["agent"] for w in state.get("worker_results", [])}
+    nxt = next((w for w in _needed_workers(state) if w not in done), "synthesize")
+    return {"route": nxt,
+            "steps": [{"node": "supervisor", "text": f"Supervisor routing to: {nxt}"}]}
 
 
-def make_synthesize_node():
-    async def synthesize(state) -> dict:
-        results = state.get("worker_results", [])
-        if not results:
-            answer = compose_answer(state.get("intent", "other"), [], state["question"])
-        elif len(results) == 1:
-            answer = results[0]["result"]
-        else:
-            answer = "\n\n".join(r["result"] for r in results if r.get("result"))
-        return {"answer": answer,
-                "steps": [{"node": "synthesize",
-                           "text": "Merged agent results into the final answer."}]}
-
-    return synthesize
+async def synthesize(state) -> dict:
+    results = state.get("worker_results", [])
+    if not results:
+        answer = compose_answer(state.get("intent", "other"), [], state["question"])
+    elif len(results) == 1:
+        answer = results[0]["result"]
+    else:
+        answer = "\n\n".join(r["result"] for r in results if r.get("result"))
+    return {"answer": answer,
+            "steps": [{"node": "synthesize",
+                       "text": "Merged agent results into the final answer."}]}
 
 
-def build_graph(tools, llm=None, planner: DeterministicPlanner | None = None) -> StateGraph:
+def build_graph(tools, llm=None) -> StateGraph:
     """Uncompiled supervisor StateGraph wiring the understand → supervise ⇄ workers → synth topology."""
-    planner = planner or DeterministicPlanner()
     builder = StateGraph(AgentState)
-    builder.add_node("understand", make_understand_node(planner, llm))
-    builder.add_node("supervise", make_supervisor_node())
-    builder.add_node("synthesize", make_synthesize_node())
+    builder.add_node("understand", make_understand_node(llm))
+    builder.add_node("supervise", supervise)
+    builder.add_node("synthesize", synthesize)
 
-    worker_targets = {}
     for spec in WORKER_SPECS:
-        subgraph = build_worker(spec, tools, llm, planner)
+        subgraph = build_worker(spec, tools, llm)
         builder.add_node(spec.name, make_worker_node(spec, subgraph))
         builder.add_edge(spec.name, "supervise")  # report back to the supervisor
-        worker_targets[spec.name] = spec.name
 
     builder.set_entry_point("understand")
     builder.add_edge("understand", "supervise")
     builder.add_conditional_edges(
         "supervise", lambda s: s["route"],
-        {**worker_targets, "synthesize": "synthesize"},
+        [*(spec.name for spec in WORKER_SPECS), "synthesize"],
     )
     builder.add_edge("synthesize", END)
     return builder
 
 
 @asynccontextmanager
-async def agent_session(transport: str = "inprocess", host: str | None = None,
-                        checkpoint_path: str = ":memory:"):
+async def agent_session(transport: str = "inprocess", checkpoint_path: str = ":memory:"):
     """Async context manager yielding a compiled graph with SqliteSaver checkpointing."""
     from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
     async with AsyncSqliteSaver.from_conn_string(checkpoint_path) as saver:
-        tools = await build_tools(transport, host)
+        tools = await build_tools(transport)
         yield build_graph(tools, get_chat_model()).compile(checkpointer=saver)
 
 
@@ -121,18 +106,16 @@ def _config(thread_id: str) -> dict:
 
 
 async def run_once(question: str, *, thread_id: str = "default",
-                   transport: str = "inprocess", host: str | None = None,
-                   checkpoint_path: str = ":memory:") -> dict:
+                   transport: str = "inprocess", checkpoint_path: str = ":memory:") -> dict:
     """Answer one question end-to-end; returns the final state dict."""
-    async with agent_session(transport, host, checkpoint_path) as graph:
+    async with agent_session(transport, checkpoint_path) as graph:
         return await graph.ainvoke(
             _turn_input(question),
             config=_config(thread_id))
 
 
 async def stream_once(question: str, *, thread_id: str = "default",
-                      transport: str = "inprocess", host: str | None = None,
-                      checkpoint_path: str = ":memory:"):
+                      transport: str = "inprocess", checkpoint_path: str = ":memory:"):
     """Yield reasoning events (dicts) as the agents work, then a final 'answer' event.
 
     The events are the `steps` each node appends to state, streamed in
@@ -142,7 +125,7 @@ async def stream_once(question: str, *, thread_id: str = "default",
     and a stream that fails by going quiet is worse than one that never
     existed. Reading them off the state updates has no such dependency.
     """
-    async with agent_session(transport, host, checkpoint_path) as graph:
+    async with agent_session(transport, checkpoint_path) as graph:
         final_state = None
         async for mode, chunk in graph.astream(
             _turn_input(question),

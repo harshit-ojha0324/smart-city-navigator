@@ -22,16 +22,8 @@ PORTS = {
 }
 
 
-def _host_for(name: str) -> str:
-    """Per-server host override (e.g. Docker service names), else the default."""
-    return os.environ.get(f"NAVIGATOR_{name.upper()}_HOST") or HOST
-
-
-def server_url(name: str, host: str | None = None) -> str:
-    """Streamable-HTTP endpoint URL for one server (mounted at /mcp)."""
-    return f"http://{host or _host_for(name)}:{PORTS[name]}/mcp"
-
-
-def all_server_urls(host: str | None = None) -> dict[str, str]:
-    """Each server's streamable-HTTP endpoint, for `agent/mcp_client.py`."""
-    return {name: server_url(name, host) for name in PORTS}
+def all_server_urls() -> dict[str, str]:
+    """Each server's streamable-HTTP endpoint (mounted at /mcp); NAVIGATOR_<NAME>_HOST
+    overrides one server's host (e.g. Docker service names)."""
+    return {name: f"http://{os.environ.get(f'NAVIGATOR_{name.upper()}_HOST') or HOST}:{port}/mcp"
+            for name, port in PORTS.items()}

@@ -6,7 +6,6 @@
 langgraph>=1.2,<2
 langgraph-checkpoint-sqlite>=3.1,<4
 langchain-core>=1.6,<2
-aiosqlite>=0.22,<1
 
 # ── Model Context Protocol (servers + client) ──────────────────────────
 mcp>=2.2,<3
@@ -17,9 +16,7 @@ mcp>=2.2,<3
 #    deterministic planner when no provider is configured) ───────────────
 langchain-google-genai>=4,<5
 langchain-ollama>=1.1,<2
-langsmith>=0.14,<1
 
 # ── Gateway + data ─────────────────────────────────────────────────────
 flask>=3,<4
-flask-cors>=6,<7
 requests>=2.31,<3

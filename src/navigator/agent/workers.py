@@ -21,11 +21,11 @@ from dataclasses import dataclass
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
-from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt import ToolNode, tools_condition
 
 from navigator.core.graph_data import feed_line
 
-from .llm import DeterministicPlanner, prompt_suffix
+from .llm import initial_tool_calls, prompt_suffix
 from .nodes import compose_answer, last_ai, message_text, tool_results
 from .state import WorkerState
 
@@ -98,12 +98,7 @@ def _carry_forward(results: list[tuple[str, object]]) -> dict:
     return dicts[-1] if dicts else {}
 
 
-def _route_worker_plan(state) -> str:
-    last = last_ai(state["messages"])
-    return "tools" if (last is not None and getattr(last, "tool_calls", None)) else "finish"
-
-
-def build_worker(spec: WorkerSpec, tools: list, llm, planner: DeterministicPlanner):
+def build_worker(spec: WorkerSpec, tools: list, llm):
     """Compile one specialist agent as a standalone plan → tools → finish subgraph."""
     my_tools = _select(tools, spec.tool_names)
     llm_with_tools = llm.bind_tools(my_tools) if llm is not None else None
@@ -122,8 +117,7 @@ def build_worker(spec: WorkerSpec, tools: list, llm, planner: DeterministicPlann
             ai = await llm_with_tools.ainvoke([system] + messages)
             return {"messages": [ai]}
         if not results_in:
-            calls = planner.initial_tool_calls(state["task"], spec.intent,
-                                               state.get("context_lines") or None)
+            calls = initial_tool_calls(state["task"], spec.intent, state.get("context_lines") or None)
             return {"messages": [AIMessage(content="", tool_calls=calls)]}
         return {"messages": [AIMessage(content="")]}
 
@@ -148,7 +142,7 @@ def build_worker(spec: WorkerSpec, tools: list, llm, planner: DeterministicPlann
     builder.add_node("tools", ToolNode(my_tools))
     builder.add_node("finish", finish)
     builder.set_entry_point("plan")
-    builder.add_conditional_edges("plan", _route_worker_plan, {"tools": "tools", "finish": "finish"})
+    builder.add_conditional_edges("plan", tools_condition, {"tools": "tools", END: "finish"})
     builder.add_edge("tools", "plan")
     builder.add_edge("finish", END)
     return builder.compile()
