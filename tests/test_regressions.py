@@ -1,6 +1,7 @@
 """Regression tests for bugs found in the Sep 2026 audit — each test names the
 failure it pins so a reintroduction reads clearly in CI."""
 import asyncio
+import itertools
 import os
 import tempfile
 
@@ -12,7 +13,7 @@ from navigator.agent.graph import run_once
 from navigator.agent.nodes import message_text
 from navigator.agent.tools import inprocess_tools
 from navigator.core import geocode, mta_feed, routing
-from navigator.core.graph_data import STATION_IDS
+from navigator.core.graph_data import COMPLEX_MEMBERS, STATION_IDS
 from navigator.gateway.app import create_app
 from navigator.mcp_servers import alerts_server, geocode_server, routing_server
 
@@ -180,6 +181,16 @@ def test_every_route_names_a_real_line_or_a_walk():
         assert "?" not in r["summary"], r["summary"]
         for leg in r["legs"]:
             assert leg["walk"] or leg["line"] in geocode.STATION_BY_ID[leg["from_id"]]["lines"]
+
+
+def test_a_trip_inside_one_station_is_a_walk_or_already_there():
+    # Times Sq -> Port Authority is a walk through the complex; it came back as
+    # found=True with no legs and "No route found."
+    for members in COMPLEX_MEMBERS.values():
+        for a, b in itertools.permutations(members, 2):
+            r = routing.plan_route(a, b)
+            assert r["summary"] == "You are already there." or (
+                r["legs"] and r["legs"][0]["from"] != r["legs"][-1]["to"]), (a, b, r["summary"])
 
 
 # ── multi-agent hand-off ───────────────────────────────────────────────

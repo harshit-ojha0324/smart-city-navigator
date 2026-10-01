@@ -125,12 +125,14 @@ def _legs_from_path(path: list[tuple[str, str, str]]) -> list[dict]:
     legs: list[dict] = []
     carried = 0.0     # in-station transfer time, folded into the leg it serves
     boarding = None   # platform you walked to inside the complex
+    rides = any(how == "ride" for _, how, _ in path)
     for (a, _, _), (b, how, line) in zip(path, path[1:], strict=False):  # pairwise
         walk = how == "walk"
         minutes = (_WALKS[a][b] if walk else _RIDES[a][b][line])
-        if walk and same_complex(a, b):
+        if walk and rides and same_complex(a, b):
             # Crossing platforms inside one station is the transfer itself, not
-            # a walking leg ("walk from Times Sq-42 St to Times Sq-42 St").
+            # a walking leg ("walk from Times Sq-42 St to Times Sq-42 St"). With
+            # no train to fold it into, the walk is the whole trip and stays a leg.
             carried += minutes
             boarding = b
             continue
@@ -196,7 +198,8 @@ def plan_route(start_id: str, end_id: str) -> dict:
         raise RouteError(f"unknown start station id: {start_id!r}")
     if end_id not in STATION_BY_ID:
         raise RouteError(f"unknown end station id: {end_id!r}")
-    if start_id == end_id:
+    # Two platforms of one same-named station are one place to a rider.
+    if STATION_BY_ID[start_id]["name"] == STATION_BY_ID[end_id]["name"] and same_complex(start_id, end_id):
         return {
             "found": True,
             "path": [start_id],
