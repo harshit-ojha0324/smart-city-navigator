@@ -22,7 +22,7 @@ from langgraph.graph import END, StateGraph
 from .llm import _STATUS_WORDS, get_chat_model
 from .nodes import compose_answer, make_understand_node
 from .state import AgentState
-from .tools import build_tools
+from .tools import inprocess_tools, load_mcp_tools
 from .workers import WORKER_SPECS, build_worker, make_worker_node
 
 # intent → ordered list of specialist agents the supervisor delegates to
@@ -88,7 +88,7 @@ async def agent_session(transport: str = "inprocess", checkpoint_path: str = ":m
     from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
     async with AsyncSqliteSaver.from_conn_string(checkpoint_path) as saver:
-        tools = await build_tools(transport)
+        tools = await load_mcp_tools() if transport == "mcp" else inprocess_tools()
         yield build_graph(tools, get_chat_model()).compile(checkpointer=saver)
 
 

@@ -61,9 +61,3 @@ async def load_mcp_tools() -> list:
 
         _mcp_tools = await load_tools(all_server_urls())
     return list(_mcp_tools)
-
-
-async def build_tools(transport: str = "inprocess") -> list:
-    if transport == "mcp":
-        return await load_mcp_tools()
-    return inprocess_tools()
