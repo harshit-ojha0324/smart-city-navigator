@@ -13,11 +13,11 @@ upstream outage (the fault-tolerance the resume claims, exercised by tests).
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import time
+import urllib.request
 from datetime import datetime, timezone
-
-import requests
 
 # ── Feed URLs ──────────────────────────────────────────────────────────
 _BASE = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds"
@@ -90,10 +90,10 @@ def _good_status() -> dict:
             "message": STATUS_MESSAGES[0], "updatedAt": _now_str(), "source": "live"}
 
 
-def _mta_get(url: str, timeout: int = 10):
-    resp = requests.get(url, timeout=timeout)
-    resp.raise_for_status()
-    return resp.json()
+def _mta_get(url: str):
+    # urlopen raises HTTPError on 4xx/5xx, so no status check is needed.
+    with urllib.request.urlopen(url, timeout=10) as resp:  # noqa: S310 - fixed MTA URLs
+        return json.load(resp)
 
 
 def _get_translation(text_obj: dict) -> str:
