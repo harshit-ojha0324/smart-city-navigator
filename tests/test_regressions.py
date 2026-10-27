@@ -166,6 +166,15 @@ def test_airport_the_subway_does_reach_offers_both_airtrain_stations():
     assert "which did you mean" in a.lower()
 
 
+def test_a_bare_street_number_is_not_read_as_a_stop_id():
+    # Stop id "125" is 59 St-Columbus Circle; a rider typing 125 means 125 St.
+    trip = routing_server.plan_trip("125", "Times Square")
+    assert trip.get("needs_disambiguation")
+    assert {c["name"] for c in trip["origin"]["candidates"]} == {"125 St"}
+    # An id no station name uses still resolves directly, as models send them.
+    assert routing_server.plan_trip("635", "Times Square")["origin_station"] == "14 St-Union Sq"
+
+
 def test_transfer_penalty_prefers_fewer_changes():
     # Bedford Av to Times Sq is one change off the L, not a three-seat scramble
     # that shaves a minute of riding.

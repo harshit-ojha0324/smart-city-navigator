@@ -93,6 +93,11 @@ def _tokens(text: str) -> list[str]:
     return out
 
 
+# Every word used in a station name; a bare number in here is a street ("125"
+# as in 125 St), whatever stop id it also happens to be.
+_NAME_WORDS = {word for s in STATIONS for word in _tokens(s["name"])}
+
+
 def normalize(text: str) -> str:
     """The canonical form used for all fuzzy place matching."""
     return " ".join(_tokens(text))
@@ -216,7 +221,9 @@ def resolve_endpoint(query: str) -> dict:
     when the nearest station is too far to be a useful answer.
     """
     query = str(query).strip()
-    if query in STATION_BY_ID:  # already a station id (models pass ids back)
+    # Already a station id (models pass ids back), unless it also names a
+    # street: a rider's "125" is 125 St, not stop 125 (59 St-Columbus Circle).
+    if query in STATION_BY_ID and query not in _NAME_WORDS:
         s = STATION_BY_ID[query]
         return {"id": s["id"], "name": s["name"], "ambiguous": False,
                 "candidates": [], "via": None}
