@@ -83,7 +83,7 @@ endpoint. A flaky model degrades the routing; it never breaks the turn.
 | LLM acts on real-time MTA data **through a standardized protocol** | [`agent/mcp_client.py`](src/navigator/agent/mcp_client.py) speaks MCP to the servers and wraps each tool for LangChain — [`agent/tools.py`](src/navigator/agent/tools.py) |
 | **Flask gateway** with **Server-Sent Events** for live agent-reasoning visibility | [`gateway/app.py`](src/navigator/gateway/app.py) |
 | Eval sets (happy paths, ambiguous queries, tool-failure handling) graded against ground truth; **LangSmith tracing** when a key is set | [`eval/`](eval/), [`run_eval.py`](eval/run_eval.py) |
-| Fault-tolerant execution / graceful degradation | SqliteSaver checkpoints (resumable) + GTFS-RT simulation fallback ([`core/mta_feed.py`](src/navigator/core/mta_feed.py)) |
+| Fault-tolerant execution / graceful degradation | SqliteSaver checkpoints (kept in a sqlite file when `NAVIGATOR_CHECKPOINT` names one; in-memory by default) + GTFS-RT simulation fallback ([`core/mta_feed.py`](src/navigator/core/mta_feed.py)) |
 
 ## The specialist agents
 
@@ -421,6 +421,8 @@ tests/           130 unit + integration tests (incl. live MCP-over-HTTP and the 
 - **Fault tolerance is real, not claimed.** `test_checkpoint_persists_to_disk_and_resumes`
   proves a run written by one session is recovered by a *fresh* session from the same
   sqlite file; the feed pipeline answers through an upstream outage via the simulation.
+  The gateway checkpoints in memory unless `NAVIGATOR_CHECKPOINT` names a file, and it
+  starts every request as a new turn: it does not resume a run that was interrupted.
 - **Grounded or it doesn't answer.** On unresolvable input the agent says so instead
   of inventing a route — asserted by `test_bad_endpoints_do_not_fabricate_a_route`.
   The same rule covers data provenance: planned work that hasn't started yet is not
@@ -467,6 +469,9 @@ Stated plainly, because a reviewer will find them anyway:
   has no timetable, no waiting model, and no Pareto front over (time, transfers) — a
   single cost with a fixed 4-minute transfer penalty approximates it. Time-dependent
   edges or RAPTOR is the honest next step.
+- **No multi-turn memory.** Each turn's question is saved to the thread's message
+  history, but no node reads it back, so a follow-up ("and from there?") is answered
+  on its own. With the default in-memory checkpoint, nothing persists between requests.
 - **Delays are scoped, not fused.** On a compound question the Service Advisor checks
   exactly the lines the route rides, but a delay never causes a re-plan around it.
 - **Alerts are the MTA's JSON feed**, not a GTFS-RT protobuf stream, and there are no

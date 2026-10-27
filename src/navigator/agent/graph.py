@@ -10,8 +10,8 @@ Supervisor multi-agent graph.
 A supervisor delegates each question to one or more independent specialist worker
 agents (each its own subgraph with its own persona/tools/loop — see workers.py),
 looping back so a compound question can visit several agents, then a synthesis
-step merges their results. Compiled with an AsyncSqliteSaver checkpointer so a run
-is resumable by thread_id after a crash.
+step merges their results. Compiled with an AsyncSqliteSaver checkpointer, so a
+run's state is kept per thread_id, in a file when checkpoint_path names one.
 """
 from __future__ import annotations
 
