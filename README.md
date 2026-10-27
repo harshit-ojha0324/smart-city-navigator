@@ -437,8 +437,8 @@ tests/           130 unit + integration tests (incl. live MCP-over-HTTP and the 
 - **Model prose cannot override tool results.** Worker answers use the shared
   deterministic composer even when an LLM chooses the tools. Route errors,
   disambiguation requests, unavailable data, and simulation labels are preserved.
-  A model response with no tool evidence returns a verification failure
-  (`tests/test_llm_path.py`). This prevents unsupported final prose; it does not
+  A model response with no tool evidence returns a verification failure, except a
+  trip with no origin, which asks where the rider is starting (`tests/test_llm_path.py`). This prevents unsupported final prose; it does not
   guarantee that a model chose the right tool arguments for the rider's question.
 - **Scores say what produced them.** Every eval report names its reasoner, the four
   sets are scored apart, and each says whether it has been tuned on. A number without

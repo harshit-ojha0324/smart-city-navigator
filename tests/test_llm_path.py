@@ -239,6 +239,19 @@ def test_model_cannot_answer_without_tool_evidence(intent, question):
     assert state["worker_results"][0]["data"] == {}
 
 
+def test_a_trip_with_no_origin_asks_for_one_instead_of_failing():
+    """Asking for the origin needs no tool call, so it must not read as a model
+    answering without evidence."""
+    model = ScriptedModel({
+        "router": _router('{"intent": "route", "needs_status": false}'),
+        "worker": AIMessage(content="Where are you starting from?"),
+    })
+    answer = _run("How do I get to Coney Island?", model)["answer"]
+    assert "Where are you starting from?" in answer
+    assert "Coney Island" in answer
+    assert "couldn't verify" not in answer
+
+
 @pytest.mark.parametrize("origin,destination,expected", [
     ("Atlantis", "Coney Island", "couldn't plan"),
     ("23 St", "Coney Island", "Which did you mean"),

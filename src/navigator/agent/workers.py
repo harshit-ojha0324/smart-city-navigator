@@ -25,7 +25,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 
 from navigator.core.graph_data import feed_line
 
-from .llm import initial_tool_calls, prompt_suffix
+from .llm import destination_only, initial_tool_calls, prompt_suffix
 from .nodes import compose_answer, tool_results
 from .state import WorkerState
 
@@ -131,8 +131,10 @@ def build_worker(spec: WorkerSpec, tools: list, llm):
         data = _carry_forward(results)
         # Tool selection can be model-driven; factual answers must come from
         # the tools. Free-form model prose can contradict results or omit an
-        # error, disambiguation request, or simulated-data disclosure.
-        if llm is not None and not results:
+        # error, disambiguation request, or simulated-data disclosure. A trip
+        # with no origin needs no tool: the composer asks where the rider is.
+        asks_origin = spec.intent == "route" and destination_only(state["task"])
+        if llm is not None and not results and not asks_origin:
             result = "I couldn't verify that with the transit tools. Please try asking again."
         else:
             result = compose_answer(spec.intent, results, state["task"])
