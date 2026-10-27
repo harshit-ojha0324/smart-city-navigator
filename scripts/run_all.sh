@@ -12,7 +12,8 @@ export NAVIGATOR_SIMULATE_FEED
 PY="${PYTHON:-python}"
 pids=()
 cleanup() { echo; echo "stopping…"; kill "${pids[@]}" 2>/dev/null || true; }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT TERM
 
 for s in alerts routing geocode; do
   $PY -m navigator.mcp_servers.${s}_server &
@@ -38,4 +39,8 @@ print("all MCP servers ready")
 PY
 
 echo "starting gateway on http://localhost:${PORT:-8000} (transport=mcp)"
-exec $PY -m navigator.gateway.app
+# Not exec: replacing this shell drops the EXIT trap, so killing the script
+# would leave the three MCP servers holding their ports.
+$PY -m navigator.gateway.app &
+pids+=($!)
+wait "$!"

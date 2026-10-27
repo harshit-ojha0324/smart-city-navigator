@@ -7,6 +7,7 @@ The other tests use the in-process transport; this one proves the resume's
 """
 import asyncio
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -88,3 +89,41 @@ def test_tools_load_over_streamable_http(live_mcp_servers):
 def test_agent_answers_through_live_mcp_servers(live_mcp_servers, question, expect):
     st = asyncio.run(run_once(question, transport="mcp"))
     assert expect in st["answer"]
+
+
+def _listening(port: int) -> bool:
+    try:
+        socket.create_connection(("127.0.0.1", port), 0.3).close()
+        return True
+    except OSError:
+        return False
+
+
+def test_run_all_stops_the_mcp_servers_when_it_is_killed():
+    """run_all.sh used to `exec` the gateway, which dropped its EXIT trap:
+    killing the script left the three MCP servers holding their ports."""
+    named = {name: _free_port() for name in servers.PORTS}
+    ports, gateway = list(named.values()), _free_port()
+    env = {**os.environ, "PYTHON": sys.executable, "PORT": str(gateway),
+           "NAVIGATOR_SIMULATE_FEED": "1",
+           **{f"NAVIGATOR_{n.upper()}_PORT": str(p) for n, p in named.items()}}
+    log = tempfile.TemporaryFile(mode="w+")
+    proc = subprocess.Popen(["bash", str(SRC.parent / "scripts" / "run_all.sh")], env=env,
+                            stdout=log, stderr=subprocess.STDOUT, text=True,
+                            start_new_session=True)
+    proc.log = log
+    try:
+        for port in [*ports, gateway]:
+            _wait_for(port, proc, timeout=60)
+        proc.terminate()
+        proc.wait(timeout=10)
+        end = time.time() + 10
+        while time.time() < end and any(_listening(p) for p in ports):
+            time.sleep(0.2)
+        assert [p for p in ports if _listening(p)] == []
+    finally:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)  # orphans stay in the script's group
+        except OSError:
+            pass
+        log.close()
