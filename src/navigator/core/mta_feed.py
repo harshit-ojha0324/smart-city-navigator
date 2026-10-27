@@ -19,6 +19,8 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
+from .graph_data import feed_line
+
 # ── Feed URLs ──────────────────────────────────────────────────────────
 _BASE = "https://api-endpoint.mta.info/Dataservice/mtagtfsfeeds"
 SUBWAY_ALERTS_URL = f"{_BASE}/camsys%2Fsubway-alerts.json"
@@ -172,7 +174,8 @@ def _parse_alerts_json(data: dict, now_ts: float | None = None) -> dict:
                     if label == "Service Alert" else STATUS_MESSAGES[severity])
         message = " ".join((header or description or fallback).split())
         for informed in alert.get("informed_entity", []):
-            route_id = informed.get("route_id", "")
+            # The feed names shuttles GS/FS/H and expresses 6X/7X; riders see S, 6, 7.
+            route_id = feed_line(informed.get("route_id", ""))
             if route_id not in result:
                 continue
             if severity > result[route_id]["severity"]:  # only upgrade severity

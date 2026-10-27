@@ -311,6 +311,17 @@ def test_active_alert_types_do_not_silently_become_good_service(kind, severity, 
     assert status["L"]["status"] == "Good Service"
 
 
+def test_shuttle_and_express_alerts_reach_their_rider_facing_line():
+    """The live feed never publishes "S": shuttle alerts arrive as GS/FS/H and
+    express-only ones as 6X/7X, which the parser used to drop."""
+    feed = {"entity": [_alert("GS", "Suspended", []), _alert("6X", "Delays", []),
+                       _alert("SI", "Suspended", [])]}
+    status = mta_feed._parse_alerts_json(feed)
+    assert status["S"]["status"] == "Suspended"
+    assert status["6"]["status"] == "Delays"
+    assert "SI" not in status  # Staten Island Railway isn't modeled
+
+
 def test_unknown_alert_without_text_does_not_invent_a_delay():
     alert = _alert("Q", "New alert type", [])
     del alert["alert"]["header_text"]
